@@ -1,6 +1,7 @@
 import os
 import time
 import sys
+# pyrefly: ignore [missing-import]
 from playwright.sync_api import sync_playwright
 
 # === CONFIGURAÇÕES GERAIS ===
@@ -328,13 +329,20 @@ def clicar_no_raiz_arvore(page, numero_processo):
     return False
 
 def configurar_e_gerar_pdf(page, context, numero_processo):
-    """Foca no iframe ifrVisualizacao, preenche as opções do PDF e executa o download."""
-    print("[*] Aguardando a tela de configuração de PDF carregar dentro do iframe '#ifrVisualizacao'...")
-    
-    # 1. Focar no iframe da direita (#ifrVisualizacao) onde as opções são carregadas
-    frame = page.frame_locator("#ifrVisualizacao")
-    
-    # 2. Localizar o botão final de submissão 'btnGerar' (em SEI 5.0.4, button[name='btnGerar'])
+    """Foca no iframe do visualizador de PDF, preenche as opções e executa o download."""
+    # No SEI 5.0.4, as opções de PDF carregam dentro do frame filho '#ifrVisualizacao' (aninhado em '#ifrConteudoVisualizacao')
+    # 1. Tentar obter o frame aninhado
+    frame = None
+    try:
+        frame = page.frame_locator("#ifrConteudoVisualizacao").frame_locator("#ifrVisualizacao")
+    except Exception:
+        pass
+        
+    # Fallback para o frame direto '#ifrVisualizacao'
+    if not frame:
+        frame = page.frame_locator("#ifrVisualizacao")
+        
+    # 2. Localizar o botão de submissão 'btnGerar'
     submit_selectors = [
         "button[name='btnGerar']",
         "#btnGerar",
@@ -355,7 +363,7 @@ def configurar_e_gerar_pdf(page, context, numero_processo):
             pass
             
     if not submit_button:
-        raise Exception("A tela de configuração de geração do PDF não foi exibida (botão 'Gerar' não encontrado no iframe '#ifrVisualizacao').")
+        raise Exception("A tela de configuração de geração do PDF não foi exibida (botão 'Gerar' não encontrado no iframe de visualização).")
 
     # 3. Selecionar o radio button "Todos os documentos disponíveis"
     # O SEI 5.0.4 geralmente usa o valor 'T' (input[value='T'])
@@ -404,13 +412,14 @@ def configurar_e_gerar_pdf(page, context, numero_processo):
     # 4. Interceptar o download e clicar em Gerar
     print("[*] Clicando em 'Gerar' e aguardando interceptação do download...")
     
-    with context.expect_download(timeout=90000) as download_info:  # tolerância de 90s para PDFs gigantes
+    with page.expect_download(timeout=90000) as download_info:  # tolerância de 90s para PDFs gigantes
         submit_button.click()
         
     download = download_info.value
     download_path = os.path.join(EXPORT_DIR, f"{numero_processo}.pdf")
     download.save_as(download_path)
     print(f"[+] Download concluído! Arquivo salvo em: {download_path}")
+
 
 def processar_exportacao():
     processos = carregar_processos()

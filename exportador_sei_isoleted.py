@@ -1,6 +1,7 @@
 import os
 import time
 import sys
+# pyrefly: ignore [missing-import]
 from playwright.sync_api import sync_playwright
 
 # === CONFIGURAÇÕES GERAIS ===
@@ -301,7 +302,7 @@ def configurar_e_gerar_pdf(page, context, numero_processo):
     # 4. Interceptar o download e clicar em Gerar
     print("[*] Clicando em 'Gerar' e aguardando interceptação do download...")
     
-    with context.expect_download(timeout=90000) as download_info:  # tolerância de 90s para PDFs gigantes
+    with page.expect_download(timeout=90000) as download_info:  # tolerância de 90s para PDFs gigantes
         submit_button.click()
         
     download = download_info.value
