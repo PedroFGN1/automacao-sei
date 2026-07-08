@@ -40,6 +40,127 @@ def carregar_processos():
         
     return processos
 
+def dump_debug_info(page, numero_processo):
+    """Gera logs de depuração avançados salvando prints, árvore DOM e HTML dos iframes."""
+    print("\n" + "!" * 80)
+    print(f"[DEBUG DUMP] INICIANDO DIAGNÓSTICO DE ELEMENTOS PARA O PROCESSO: {numero_processo}")
+    print("!" * 80)
+    
+    debug_dir = r"C:\SEI_Exportacoes\debug_info"
+    os.makedirs(debug_dir, exist_ok=True)
+    
+    # 1. Capturar e salvar screenshot da página inteira
+    screenshot_path = os.path.join(debug_dir, f"screenshot_{numero_processo}.png")
+    try:
+        page.screenshot(path=screenshot_path, full_page=True)
+        print(f"[DEBUG] Screenshot salvo em: {screenshot_path}")
+    except Exception as e:
+        print(f"[DEBUG] [ERRO] Falha ao tirar screenshot: {e}")
+        
+    # 2. Dump da hierarquia de frames
+    hierarchy_path = os.path.join(debug_dir, f"hierarquia_frames_{numero_processo}.txt")
+    try:
+        with open(hierarchy_path, "w", encoding="utf-8") as f:
+            f.write(f"PROCESSO: {numero_processo}\n")
+            f.write(f"URL PRINCIPAL: {page.url}\n")
+            f.write(f"TÍTULO DA PÁGINA: {page.title()}\n\n")
+            f.write("HIERARQUIA COMPLETA DE IFRAMES NO DOM:\n")
+            
+            def dump_frame(fr, indent=""):
+                f.write(f"{indent}- Frame Name: '{fr.name}', ID/Atributos: '{fr.url}'\n")
+                for child in fr.child_frames:
+                    dump_frame(child, indent + "  ")
+                    
+            for top_fr in page.main_frame.child_frames:
+                dump_frame(top_fr, "  ")
+        print(f"[DEBUG] Hierarquia de frames salva em: {hierarchy_path}")
+    except Exception as e:
+        print(f"[DEBUG] [ERRO] Falha ao mapear hierarquia de frames: {e}")
+        
+    # 3. Dump HTML de cada frame carregado
+    try:
+        # Conteúdo do documento principal
+        main_html_path = os.path.join(debug_dir, f"html_pagina_principal_{numero_processo}.html")
+        with open(main_html_path, "w", encoding="utf-8") as f:
+            f.write(page.content())
+            
+        # Conteúdo individual de cada frame
+        for i, fr in enumerate(page.frames):
+            fr_name = fr.name if fr.name else f"frame_sem_nome_{i}"
+            # Limpa caracteres especiais do nome para salvar o arquivo
+            safe_name = "".join(c for c in fr_name if c.isalnum() or c in ("-", "_"))
+            fr_html_path = os.path.join(debug_dir, f"html_frame_{safe_name}_{numero_processo}.html")
+            with open(fr_html_path, "w", encoding="utf-8") as f:
+                f.write(fr.content())
+        print(f"[DEBUG] Dumps HTML salvos na pasta: {debug_dir}")
+    except Exception as e:
+        print(f"[DEBUG] [ERRO] Falha ao realizar dump de código HTML: {e}")
+        
+    # 4. Análise e varredura heurística de elementos
+    analysis_path = os.path.join(debug_dir, f"analise_elementos_{numero_processo}.txt")
+    try:
+        with open(analysis_path, "w", encoding="utf-8") as f:
+            f.write(f"ANÁLISE HEURÍSTICA DE LINKS E BOTÕES - PROCESSO: {numero_processo}\n")
+            f.write("=" * 80 + "\n\n")
+            
+            for i, fr in enumerate(page.frames):
+                fr_name = fr.name if fr.name else f"sem_nome_{i}"
+                f.write(f"--- FRAME: '{fr_name}' (URL: {fr.url}) ---\n")
+                
+                # Links <a>
+                try:
+                    links = fr.locator("a").all()
+                    f.write(f"Links (<a>) localizados: {len(links)}\n")
+                    for idx, link in enumerate(links):
+                        try:
+                            href = link.get_attribute("href") or ""
+                            onclick = link.get_attribute("onclick") or ""
+                            title = link.get_attribute("title") or ""
+                            text = link.inner_text().strip()
+                            inner_html = link.inner_html().strip()
+                            
+                            # Filtro heurístico para termos de interesse em automações do SEI
+                            if any(word in (href + onclick + title + text + inner_html).lower() for word in ["pdf", "gerar", "procedimento", "print", "documento"]):
+                                f.write(f"  [LINK {idx}]:\n")
+                                f.write(f"    Texto Visível: '{text}'\n")
+                                f.write(f"    href: '{href}'\n")
+                                f.write(f"    onclick: '{onclick}'\n")
+                                f.write(f"    title: '{title}'\n")
+                                f.write(f"    Inner HTML: {inner_html[:150]}...\n\n")
+                        except Exception:
+                            pass
+                except Exception as e:
+                    f.write(f"  [ERRO ao ler links]: {e}\n")
+                    
+                # Imagens <img>
+                try:
+                    imgs = fr.locator("img").all()
+                    f.write(f"Imagens (<img>) localizadas: {len(imgs)}\n")
+                    for idx, img in enumerate(imgs):
+                        try:
+                            src = img.get_attribute("src") or ""
+                            title = img.get_attribute("title") or ""
+                            alt = img.get_attribute("alt") or ""
+                            
+                            if any(word in (src + title + alt).lower() for word in ["pdf", "gerar", "print", "processo"]):
+                                f.write(f"  [IMG {idx}]:\n")
+                                f.write(f"    src: '{src}'\n")
+                                f.write(f"    title: '{title}'\n")
+                                f.write(f"    alt: '{alt}'\n\n")
+                        except Exception:
+                            pass
+                except Exception as e:
+                    f.write(f"  [ERRO ao ler imagens]: {e}\n")
+                
+                f.write("\n" + "-"*80 + "\n\n")
+        print(f"[DEBUG] Análise heurística salva em: {analysis_path}")
+    except Exception as e:
+        print(f"[DEBUG] [ERRO] Falha ao executar varredura de elementos: {e}")
+        
+    print("!" * 80)
+    print(f"[DEBUG DUMP] DIAGNÓSTICO CONCLUÍDO PARA: {numero_processo}")
+    print("!" * 80 + "\n")
+
 def aguardar_login(page):
     """Aguarda até que o usuário esteja logado no SEI (busca rápida ou menu principal visíveis)."""
     print("[*] Aguardando login no SEI. Por favor, acesse o sistema no navegador aberto...")
@@ -116,7 +237,7 @@ def preencher_busca_rapida(page, numero_processo):
     return False
 
 def encontrar_botao_gerar_pdf(page):
-    """Busca o botão de gerar PDF do processo seguindo a hierarquia de iframes do SEI 5.0.4."""
+    """Busca o botão de gerar PDF do processo seguindo a hierarquia de iframes aninhados do SEI 5.0.4."""
     selectors = [
         "a[href*='acao=procedimento_gerar_pdf']",
         "a[onclick*='acao=procedimento_gerar_pdf']",
@@ -128,37 +249,23 @@ def encontrar_botao_gerar_pdf(page):
         "[title*='Gerar Arquivo PDF']"
     ]
     
-    # No SEI 5.0.4, o botão do PDF reside fisicamente no painel da direita 'ifrConteudoVisualizacao'.
-    # 1. Tentar diretamente no frame '#ifrConteudoVisualizacao'
+    # 1. Fluxo Principal: Encadeamento de frames (#ifrVisualizacao -> #ifrConteudoVisualizacao)
+    # No SEI 5.0.4, o botão do PDF reside fisicamente dentro do frame filho #ifrConteudoVisualizacao.
     try:
-        frame_conteudo = page.frame_locator("#ifrConteudoVisualizacao")
+        frame_filho = page.frame_locator("#ifrVisualizacao").frame_locator("#ifrConteudoVisualizacao")
         for sel in selectors:
             try:
-                loc = frame_conteudo.locator(sel)
+                loc = frame_filho.locator(sel)
                 if loc.first.is_visible():
-                    print(f"[*] Botão 'Gerar PDF' localizado no frame '#ifrConteudoVisualizacao' (seletor: '{sel}')")
+                    print(f"[*] Botão 'Gerar PDF' localizado via frames aninhados (seletor: '{sel}')")
                     return loc.first
             except Exception:
                 pass
     except Exception as e:
-        print(f"[!] Erro ao buscar botão no frame '#ifrConteudoVisualizacao': {e}")
+        print(f"[!] Erro ao tentar buscar botão nos frames aninhados: {e}")
             
-    # 2. Fallbacks em caso de telas ou versões diferentes
-    # Fallback no frame '#ifrVisualizacao'
-    try:
-        frame_visualizacao = page.frame_locator("#ifrVisualizacao")
-        for sel in selectors:
-            try:
-                loc = frame_visualizacao.locator(sel)
-                if loc.first.is_visible():
-                    print(f"[*] [Fallback] Botão 'Gerar PDF' localizado no frame '#ifrVisualizacao' (seletor: '{sel}')")
-                    return loc.first
-            except Exception:
-                pass
-    except Exception:
-        pass
-        
-    # Fallback no contexto global da página raiz
+    # 2. Bloco de Fallback: Se o fluxo aninhado falhar, tenta nos contextos separados
+    # Tentativa no contexto global (página raiz)
     for sel in selectors:
         try:
             loc = page.locator(sel)
@@ -168,17 +275,20 @@ def encontrar_botao_gerar_pdf(page):
         except Exception:
             pass
             
-    # Fallback geral iterando por todos os frames da página
-    for f in page.frames:
-        for sel in selectors:
-            try:
-                loc = f.locator(sel)
-                if loc.first.is_visible():
-                    print(f"[*] [Fallback] Botão localizado no frame genérico '{f.name}'")
-                    return loc.first
-            except Exception:
-                pass
-                
+    # Tentativa nos frames individuais
+    frame_names = ["ifrConteudoVisualizacao", "ifrVisualizacao", "ifrArvore"]
+    for frame_name in frame_names:
+        for f in page.frames:
+            if f.name == frame_name or frame_name in f.url:
+                for sel in selectors:
+                    try:
+                        loc = f.locator(sel)
+                        if loc.first.is_visible():
+                            print(f"[*] [Fallback] Botão 'Gerar PDF' localizado no frame '{frame_name}' (seletor: '{sel}')")
+                            return loc.first
+                    except Exception:
+                        pass
+                        
     return None
 
 def clicar_no_raiz_arvore(page, numero_processo):
@@ -218,20 +328,13 @@ def clicar_no_raiz_arvore(page, numero_processo):
     return False
 
 def configurar_e_gerar_pdf(page, context, numero_processo):
-    """Foca no iframe do visualizador de PDF, preenche as opções e executa o download."""
-    # No SEI 5.0.4, as opções de PDF carregam dentro do frame filho '#ifrVisualizacao' (aninhado em '#ifrConteudoVisualizacao')
-    # 1. Tentar obter o frame aninhado
-    frame = None
-    try:
-        frame = page.frame_locator("#ifrConteudoVisualizacao").frame_locator("#ifrVisualizacao")
-    except Exception:
-        pass
-        
-    # Fallback para o frame direto '#ifrVisualizacao'
-    if not frame:
-        frame = page.frame_locator("#ifrVisualizacao")
-        
-    # 2. Localizar o botão de submissão 'btnGerar'
+    """Foca no iframe ifrVisualizacao, preenche as opções do PDF e executa o download."""
+    print("[*] Aguardando a tela de configuração de PDF carregar dentro do iframe '#ifrVisualizacao'...")
+    
+    # 1. Focar no iframe da direita (#ifrVisualizacao) onde as opções são carregadas
+    frame = page.frame_locator("#ifrVisualizacao")
+    
+    # 2. Localizar o botão final de submissão 'btnGerar' (em SEI 5.0.4, button[name='btnGerar'])
     submit_selectors = [
         "button[name='btnGerar']",
         "#btnGerar",
@@ -252,7 +355,7 @@ def configurar_e_gerar_pdf(page, context, numero_processo):
             pass
             
     if not submit_button:
-        raise Exception("A tela de configuração de geração do PDF não foi exibida (botão 'Gerar' não encontrado no iframe de visualização).")
+        raise Exception("A tela de configuração de geração do PDF não foi exibida (botão 'Gerar' não encontrado no iframe '#ifrVisualizacao').")
 
     # 3. Selecionar o radio button "Todos os documentos disponíveis"
     # O SEI 5.0.4 geralmente usa o valor 'T' (input[value='T'])
@@ -338,7 +441,7 @@ def processar_exportacao():
             except Exception:
                 raise Exception("URL do SEI não foi informada. Configure a variável 'SEI_URL' no script ou crie o arquivo 'url_sei.txt'.")
                 
-    print("[*] Iniciando navegador Chrome isolado...")
+    print("[*] Iniciando navegador Chrome isolado em modo depuração...")
     try:
         with sync_playwright() as p:
             # Abre navegador isolado e persistente
@@ -378,9 +481,9 @@ def processar_exportacao():
                             raise Exception("Não foi possível localizar o campo de busca rápida '#txtPesquisaRapida' na tela.")
 
                     # Passo 2: Aguardar o carregamento da página do processo
-                    # Monitora o contêiner principal da direita (#ifrConteudoVisualizacao)
+                    # Monitora o iframe principal da visualização da direita (#ifrVisualizacao)
                     try:
-                        page.wait_for_selector("#ifrConteudoVisualizacao", timeout=15000)
+                        page.wait_for_selector("#ifrVisualizacao", timeout=15000)
                     except Exception:
                         alert_selectors = [".infraMensagem", ".mensagem", "#mensagem", "text='não encontrado'", "text='inexistente'"]
                         alert_text = ""
@@ -395,13 +498,15 @@ def processar_exportacao():
                         if alert_text:
                             raise Exception(f"Erro no SEI: '{alert_text}'")
                         else:
-                            raise Exception("Timeout aguardando o carregamento do painel do processo.")
+                            # Tenta realizar dump se não encontrar visualização
+                            dump_debug_info(page, numero_processo)
+                            raise Exception("Timeout aguardando o carregamento do iframe de visualização.")
                     
-                    # Garante um tempo de renderização para o iframe interno
+                    # Garante um tempo de renderização para o iframe interno filho (#ifrConteudoVisualizacao)
                     print("[*] Aguardando renderização do painel interno...")
                     time.sleep(2.5)
                     
-                    # Passo 3 & 4: Buscar o botão Gerar PDF
+                    # Passo 3 & 4: Buscar o botão Gerar PDF (Seguindo a hierarquia de frames aninhados)
                     pdf_button = encontrar_botao_gerar_pdf(page)
                     
                     # Se não achou de primeira, força o clique no nó raiz na árvore
@@ -411,6 +516,8 @@ def processar_exportacao():
                         pdf_button = encontrar_botao_gerar_pdf(page)
                         
                     if not pdf_button:
+                        # Executa o dump de debug avançado!
+                        dump_debug_info(page, numero_processo)
                         raise Exception("Botão 'Gerar PDF do Processo' (acao=procedimento_gerar_pdf) não foi localizado na interface.")
                         
                     # Passo 5: Clicar no botão (carregará as opções no iframe #ifrVisualizacao)
@@ -442,6 +549,6 @@ if __name__ == "__main__":
         kernel32.SetConsoleMode(kernel32.GetStdHandle(-11), 7)
         
     print("=" * 60)
-    print("      EXPORTADOR SEI ISOLADO (PERSISTENTE) - PDF")
+    print("      DIAGNÓSTICO EXPORTADOR SEI - DEBUG")
     print("=" * 60)
     processar_exportacao()

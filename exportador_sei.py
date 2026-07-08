@@ -104,7 +104,7 @@ def preencher_busca_rapida(page, numero_processo):
     return False
 
 def encontrar_botao_gerar_pdf(page):
-    """Busca o botão de gerar PDF do processo diretamente no contexto global da página."""
+    """Busca o botão de gerar PDF do processo seguindo a hierarquia de iframes do SEI 5.0.4."""
     selectors = [
         "a[href*='acao=procedimento_gerar_pdf']",
         "a[onclick*='acao=procedimento_gerar_pdf']",
@@ -116,31 +116,57 @@ def encontrar_botao_gerar_pdf(page):
         "[title*='Gerar Arquivo PDF']"
     ]
     
-    # Conforme SEI 5.0.4, o link está diretamente na página principal (raiz), e não dentro de frames.
-    # Tentamos primeiro localizá-lo diretamente no contexto global da página.
+    # No SEI 5.0.4, o botão do PDF reside fisicamente no painel da direita 'ifrConteudoVisualizacao'.
+    # 1. Tentar diretamente no frame '#ifrConteudoVisualizacao'
+    try:
+        frame_conteudo = page.frame_locator("#ifrConteudoVisualizacao")
+        for sel in selectors:
+            try:
+                loc = frame_conteudo.locator(sel)
+                if loc.first.is_visible():
+                    print(f"[*] Botão 'Gerar PDF' localizado no frame '#ifrConteudoVisualizacao' (seletor: '{sel}')")
+                    return loc.first
+            except Exception:
+                pass
+    except Exception as e:
+        print(f"[!] Erro ao buscar botão no frame '#ifrConteudoVisualizacao': {e}")
+            
+    # 2. Fallbacks em caso de telas ou versões diferentes
+    # Fallback no frame '#ifrVisualizacao'
+    try:
+        frame_visualizacao = page.frame_locator("#ifrVisualizacao")
+        for sel in selectors:
+            try:
+                loc = frame_visualizacao.locator(sel)
+                if loc.first.is_visible():
+                    print(f"[*] [Fallback] Botão 'Gerar PDF' localizado no frame '#ifrVisualizacao' (seletor: '{sel}')")
+                    return loc.first
+            except Exception:
+                pass
+    except Exception:
+        pass
+        
+    # Fallback no contexto global da página raiz
     for sel in selectors:
         try:
             loc = page.locator(sel)
             if loc.first.is_visible():
-                print(f"[*] Botão 'Gerar PDF' localizado na página principal (seletor: '{sel}')")
+                print(f"[*] [Fallback] Botão 'Gerar PDF' localizado na raiz (seletor: '{sel}')")
                 return loc.first
         except Exception:
             pass
             
-    # Fallback apenas em caso de incompatibilidade (busca nos frames principais)
-    frame_names = ["ifrArvore", "ifrVisualizacao"]
-    for frame_name in frame_names:
-        for f in page.frames:
-            if f.name == frame_name or frame_name in f.url:
-                for sel in selectors:
-                    try:
-                        loc = f.locator(sel)
-                        if loc.first.is_visible():
-                            print(f"[*] [Fallback] Botão 'Gerar PDF' localizado no frame '{frame_name}' (seletor: '{sel}')")
-                            return loc.first
-                    except Exception:
-                        pass
-                        
+    # Fallback geral iterando por todos os frames da página
+    for f in page.frames:
+        for sel in selectors:
+            try:
+                loc = f.locator(sel)
+                if loc.first.is_visible():
+                    print(f"[*] [Fallback] Botão localizado no frame genérico '{f.name}'")
+                    return loc.first
+            except Exception:
+                pass
+                
     return None
 
 def clicar_no_raiz_arvore(page, numero_processo):
@@ -180,13 +206,20 @@ def clicar_no_raiz_arvore(page, numero_processo):
     return False
 
 def configurar_e_gerar_pdf(page, context, numero_processo):
-    """Foca no iframe ifrVisualizacao, preenche as opções do PDF e executa o download."""
-    print("[*] Aguardando a tela de configuração de PDF carregar dentro do iframe '#ifrVisualizacao'...")
-    
-    # 1. Focar no iframe da direita (#ifrVisualizacao) onde as opções são carregadas
-    frame = page.frame_locator("#ifrVisualizacao")
-    
-    # 2. Localizar o botão final de submissão 'btnGerar' (em SEI 5.0.4, button[name='btnGerar'])
+    """Foca no iframe do visualizador de PDF, preenche as opções e executa o download."""
+    # No SEI 5.0.4, as opções de PDF carregam dentro do frame filho '#ifrVisualizacao' (aninhado em '#ifrConteudoVisualizacao')
+    # 1. Tentar obter o frame aninhado
+    frame = None
+    try:
+        frame = page.frame_locator("#ifrConteudoVisualizacao").frame_locator("#ifrVisualizacao")
+    except Exception:
+        pass
+        
+    # Fallback para o frame direto '#ifrVisualizacao'
+    if not frame:
+        frame = page.frame_locator("#ifrVisualizacao")
+        
+    # 2. Localizar o botão de submissão 'btnGerar'
     submit_selectors = [
         "button[name='btnGerar']",
         "#btnGerar",
@@ -199,7 +232,6 @@ def configurar_e_gerar_pdf(page, context, numero_processo):
     for sel in submit_selectors:
         try:
             loc = frame.locator(sel)
-            # Aguarda o botão ficar visível no contexto do iframe
             loc.first.wait_for(state="visible", timeout=15000)
             submit_button = loc.first
             print(f"[*] Botão 'Gerar' encontrado no iframe com o seletor: '{sel}'")
@@ -208,7 +240,7 @@ def configurar_e_gerar_pdf(page, context, numero_processo):
             pass
             
     if not submit_button:
-        raise Exception("A tela de configuração de geração do PDF não foi exibida (botão 'Gerar' não encontrado no iframe '#ifrVisualizacao').")
+        raise Exception("A tela de configuração de geração do PDF não foi exibida (botão 'Gerar' não encontrado no iframe de visualização).")
 
     # 3. Selecionar o radio button "Todos os documentos disponíveis"
     # O SEI 5.0.4 geralmente usa o valor 'T' (input[value='T'])
@@ -299,11 +331,10 @@ def processar_exportacao():
                             raise Exception("Não foi possível localizar o campo de busca rápida '#txtPesquisaRapida' na tela.")
 
                     # Passo 2: Aguardar o carregamento da página do processo
-                    # Espera pelo iframe principal de visualização carregar
+                    # Monitora o contêiner principal da direita (#ifrConteudoVisualizacao)
                     try:
-                        page.wait_for_selector("#ifrVisualizacao", timeout=15000)
+                        page.wait_for_selector("#ifrConteudoVisualizacao", timeout=15000)
                     except Exception:
-                        # Se falhou, verifica se o SEI exibiu alguma mensagem de erro de processo inexistente
                         alert_selectors = [".infraMensagem", ".mensagem", "#mensagem", "text='não encontrado'", "text='inexistente'"]
                         alert_text = ""
                         for sel in alert_selectors:
@@ -317,11 +348,13 @@ def processar_exportacao():
                         if alert_text:
                             raise Exception(f"Erro no SEI: '{alert_text}'")
                         else:
-                            raise Exception("Timeout aguardando o carregamento dos frames do processo.")
+                            raise Exception("Timeout aguardando o carregamento do painel do processo.")
                     
-                    time.sleep(1.5)  # Pequeno delay para renderização dos iframes
+                    # Garante um tempo de renderização para o iframe interno
+                    print("[*] Aguardando renderização do painel interno...")
+                    time.sleep(2.5)
                     
-                    # Passo 3 & 4: Buscar o botão Gerar PDF (Diretamente no contexto da página global/raiz)
+                    # Passo 3 & 4: Buscar o botão Gerar PDF
                     pdf_button = encontrar_botao_gerar_pdf(page)
                     
                     # Se não achou de primeira, força o clique no nó raiz na árvore
@@ -333,11 +366,11 @@ def processar_exportacao():
                     if not pdf_button:
                         raise Exception("Botão 'Gerar PDF do Processo' (acao=procedimento_gerar_pdf) não foi localizado na interface.")
                         
-                    # Passo 5: Clicar no botão (que carregará a configuração no iframe #ifrVisualizacao)
+                    # Passo 5: Clicar no botão (carregará as opções no iframe #ifrVisualizacao)
                     print("[*] Clicando no ícone 'Gerar PDF' do processo...")
                     pdf_button.click()
                     
-                    # Passo 6 & 7: Focar no iframe #ifrVisualizacao, ajustar configurações e realizar download
+                    # Passo 6 & 7: Ajustar configurações de PDF e baixar
                     configurar_e_gerar_pdf(page, context, numero_processo)
                     
                 except Exception as proc_err:
@@ -358,7 +391,6 @@ def processar_exportacao():
         print("[TIP] Comando para iniciar o Chrome: chrome.exe --remote-debugging-port=9222")
 
 if __name__ == "__main__":
-    # Garante suporte a logs coloridos/Unicode no console do Windows
     if sys.platform.startswith("win"):
         import ctypes
         kernel32 = ctypes.windll.kernel32
