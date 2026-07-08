@@ -1,0 +1,33 @@
+Aja como um Engenheiro de Automação de Testes e Web Scraping Sênior.
+
+Preciso de um script em Python utilizando a biblioteca Playwright para automatizar o download de arquivos PDF de um sistema governamental chamado SEI (Sistema Eletrônico de Informações).
+
+Contexto e Regras de Negócio:
+
+1. O sistema utiliza uma arquitetura baseada em iframes (ifrArvore para o menu do processo e ifrVisualizacao para a visualização dos documentos).
+
+2. O script não fará login. Ele deve se conectar a uma instância do Google Chrome já aberta e logada na minha máquina utilizando a porta de depuração remota (--remote-debugging-port=9222).
+
+3. Eu fornecerei um arquivo .txt ou uma lista em Python com os números dos processos (ex: 202600004061543).
+
+4. Atenção ao comportamento dinâmico: O sistema usa um parâmetro chamado infra_hash nas URLs e requisições, que muda dinamicamente a cada clique. Por isso, não podemos usar requisições POST/GET diretas com a biblioteca requests. Precisamos simular os cliques reais na interface.
+
+O Fluxo que o script deve executar em loop para cada processo:
+
+1. Acessar a tela de "Pesquisa" ou inserir o número do processo na barra de busca rápida e dar Enter.
+
+2. Aguardar o carregamento da página do processo.
+
+3. Focar no iframe da direita (geralmente ifrVisualizacao).
+
+4. Encontrar e clicar no ícone "Gerar Arquivo PDF do Processo" (é um botão com o ícone de PDF, cuja URL ou ação contém acao=procedimento_gerar_pdf).
+
+5. Aguardar a tela de configuração do PDF carregar dentro desse mesmo iframe.
+
+6. Selecionar o radio button "Todos os documentos disponíveis" (se já não estiver selecionado por padrão) e clicar no botão "Gerar".
+
+7. Interceptar o download: O Playwright deve aguardar o evento de download do navegador, salvar o arquivo PDF gerado na minha pasta local C:\SEI_Exportacoes, nomeando-o com o número do processo (ex: 202600004061543.pdf).
+
+8. Aplicar um time.sleep() de 4 segundos antes de ir para o próximo processo para evitar sobrecarga no servidor e bloqueio por WAF/Firewall.
+
+Escreva o código completo, com tratamento de erros (try/except) caso um processo não exista ou demore muito para carregar, para que o loop não quebre e continue para o próximo da lista. Adicione logs no console (print) para eu acompanhar o progresso.

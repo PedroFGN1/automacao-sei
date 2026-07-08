@@ -1,0 +1,3 @@
+# Insira um número de processo do SEI por linha. Linhas vazias ou iniciadas com '#' serão desconsideradas.
+202600004061428
+202600004061543
