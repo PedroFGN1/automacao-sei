@@ -1,58 +1,66 @@
 # Automação de Exportação de PDFs do SEI
 
-Este projeto automatiza o download em lote de arquivos PDF de processos do SEI (Sistema Eletrônico de Informações) utilizando a biblioteca **Playwright** em Python.
+Este projeto fornece uma solução robusta e resiliente em **Python** e **Playwright** para realizar o download em lote de arquivos PDF completos de processos do **SEI (Sistema Eletrônico de Informações)**, especificamente otimizado para o **SEI 5.0.4**.
 
-O script conecta-se a uma instância ativa do **Google Chrome** (que já deve estar logada no SEI) na porta de depuração remota `9222`. Ele simula os cliques reais do usuário para contornar o parâmetro dinâmico `infra_hash` das requisições e evitar bloqueios.
+A automação é projetada para rodar de forma confiável em lotes massivos (mais de 3.000 processos), fornecendo rastreabilidade por banco de dados, barra de progresso no terminal e relatórios pós-execução.
+
+---
+
+## 🏗️ Estrutura do Repositório
+
+- **[exportador_sei_isoleted.py](file:///C:/Users/pedro.galvao/Documents/automacao-sei/exportador_sei_isoleted.py)**: Script que gerencia e abre seu próprio navegador Chrome de forma isolada e persistente, armazenando a sessão de login localmente.
+- **[exportador_sei.py](file:///C:/Users/pedro.galvao/Documents/automacao-sei/exportador_sei.py)**: Script alternativo que se conecta a uma instância do Chrome já aberta no seu computador (porta de depuração `9222`).
+- **[processos.txt](file:///C:/Users/pedro.galvao/Documents/automacao-sei/processos.txt)**: Lista de entrada onde você insere os números dos processos a serem baixados (um por linha).
+- **[automacao.db](file:///C:/Users/pedro.galvao/Documents/automacao-sei/automacao.db)**: Banco de dados SQLite criado automaticamente para armazenar e rastrear o estado da fila de exportação.
+- **[docs/Constitution.md](file:///C:/Users/pedro.galvao/Documents/automacao-sei/docs/Constitution.md)**: Documento de constituição de arquitetura contendo especificações técnicas do DOM do SEI 5.0.4 para referência de IA/desenvolvedores.
+- **[iniciar_exportador_isolado.bat](file:///C:/Users/pedro.galvao/Documents/automacao-sei/iniciar_exportador_isolado.bat)**: Script utilitário em lote para executar o extrator isolado com um duplo clique.
+- **[iniciar_chrome_debug.bat](file:///C:/Users/pedro.galvao/Documents/automacao-sei/iniciar_chrome_debug.bat)**: Script em lote para abrir o Chrome na porta 9222 (para uso com o script alternativo).
 
 ---
 
 ## 🛠️ Requisitos de Instalação e Preparação
 
-### 1. Preparar o Ambiente Python
-O script utiliza a biblioteca `playwright`. Nós já instalamos ela no seu ambiente virtual (`.venv`).
-
-Caso precise rodar em outro local ou reconfigurar, execute:
+### 1. Ambiente Python
+A biblioteca `playwright` deve estar instalada no seu ambiente virtual local (`.venv`).
+Para garantir a instalação das dependências:
 ```bash
 .venv\Scripts\pip install playwright
 ```
 
-### 2. Iniciar o Google Chrome no Modo de Depuração
-Para que o Playwright consiga se conectar ao seu navegador logado, você precisa iniciar o Google Chrome na porta `9222`.
-
-1. **Feche completamente** todas as janelas abertas do Google Chrome (certifique-se no Gerenciador de Tarefas de que não há processos remanescentes).
-2. Abra o menu Iniciar do Windows, digite `Executar` (ou pressione `Win + R`).
-3. Cole o seguinte comando e aperte **Enter**:
-   ```cmd
-   chrome.exe --remote-debugging-port=9222
-   ```
-4. O Google Chrome abrirá. **Acesse o seu SEI e faça login normalmente**. O script usará essa mesma aba para realizar as consultas e downloads.
+### 2. Definir a URL do SEI
+Você pode definir a URL do SEI do seu órgão de duas formas:
+- Editando a variável `SEI_URL` diretamente no topo dos scripts Python.
+- Ou digitando a URL no terminal na primeira execução (o script criará automaticamente o arquivo `url_sei.txt` com o endereço para as próximas vezes).
 
 ---
 
 ## 🚀 Como Usar
 
-1. **Definir a lista de processos**:
-   Edite o arquivo [processos.txt](file:///C:/Users/pedro.galvao/Documents/automacao-sei/processos.txt) e adicione os números dos processos que deseja baixar, um por linha. Exemplo:
-   ```text
-   202600004061428
-   202600004061543
-   ```
+### Opção A: Usando o Navegador Isolado (Recomendado)
+Esta opção abre uma instância do Chrome totalmente limpa, mas mantém sua sessão salva em uma pasta local (`C:\SEI_Exportacoes\perfil_sei`), evitando que você precise fazer login a cada execução.
 
-2. **Executar o Script**:
-   Com o Chrome aberto e logado na porta 9222, execute o script no terminal:
-   ```powershell
+1. Insira os processos desejados no arquivo **[processos.txt](file:///C:/Users/pedro.galvao/Documents/automacao-sei/processos.txt)**.
+2. Dê um duplo clique em **[iniciar_exportador_isolado.bat](file:///C:/Users/pedro.galvao/Documents/automacao-sei/iniciar_exportador_isolado.bat)** (ou execute `.venv\Scripts\python.exe exportador_sei_isoleted.py` no terminal).
+3. Na janela do Chrome que se abrir, faça o login normalmente.
+4. O script detectará o login e iniciará a exportação em lote automaticamente.
+
+### Opção B: Usando a Porta de Depuração 9222
+Ideal se você preferir rodar a automação diretamente no seu navegador Chrome principal de trabalho.
+
+1. **Feche completamente** todas as janelas abertas do Google Chrome.
+2. Dê um duplo clique em **[iniciar_chrome_debug.bat](file:///C:/Users/pedro.galvao/Documents/automacao-sei/iniciar_chrome_debug.bat)** para reabrir o Chrome em modo debug.
+3. Acesse o SEI e faça o login na janela que se abriu.
+4. No terminal, execute:
+   ```bash
    .venv\Scripts\python.exe exportador_sei.py
    ```
 
-3. **Arquivos Gerados**:
-   O script salvará todos os PDFs gerados na pasta **`C:\SEI_Exportacoes`**. Os arquivos serão nomeados de acordo com o número do processo (ex: `202600004061543.pdf`).
-
 ---
 
-## 🛡️ Tratamento de Erros e Resiliência do Loop
+## 📊 Recursos de Confiabilidade do Pipeline
 
-O script [exportador_sei.py](file:///C:/Users/pedro.galvao/Documents/automacao-sei/exportador_sei.py) foi desenvolvido seguindo padrões de desenvolvimento sênior:
-- **Resiliência do Loop**: Se um processo demorar para carregar ou não for encontrado, ele exibe a falha no console, aguarda o tempo de segurança e prossegue para o próximo processo.
-- **Detecção Inteligente de Erros**: Identifica alertas nativos do SEI (processo inexistente ou sem permissão).
-- **Seletores Multi-Versão**: Utiliza uma matriz de seletores comuns do SEI para encontrar a barra de pesquisa, o botão "Gerar PDF", o radio button e o botão de download, garantindo funcionamento em versões 3.x e 4.x do SEI.
-- **Forçar Nó Raiz**: Caso o botão "Gerar PDF" não seja visível inicialmente, o script tenta clicar no nó do processo na árvore de documentos para abrir a capa e recarregar os botões.
+- **Controle Transacional por SQLite**: Se o script for interrompido a qualquer momento, ao reiniciá-lo ele continuará exatamente do último processo pendente.
+- **Auto-Skip**: PDFs já salvos na pasta **`C:\SEI_Exportacoes`** com tamanho maior que 1 KB são identificados e marcados como concluídos no banco de dados, evitando downloads repetidos.
+- **Deduplicação Automática**: Linhas duplicadas no arquivo `processos.txt` são limpas automaticamente, mantendo a ordem correta e prevenindo erros de restrição de chave única no banco.
+- **Política de Re-tentativa**: Falhas de carregamento ou download sofrem uma tentativa de re-execução imediata antes de marcar o processo como `FALHA` e pular para o próximo.
+- **Interface e Relatório**: O terminal exibe uma barra de progresso em tempo real com estatísticas de sucesso/falha e cálculo de tempo restante (ETA). Ao término da corrida, um arquivo descritivo contendo os detalhes das falhas é gerado no diretório de exportação.
