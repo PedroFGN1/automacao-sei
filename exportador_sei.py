@@ -1,13 +1,15 @@
 import os
 import time
 import sys
-# pyrefly: ignore [missing-import]
+import sqlite3
+from datetime import datetime
 from playwright.sync_api import sync_playwright
 
 # === CONFIGURAÇÕES GERAIS ===
 CHROME_CDP_URL = "http://localhost:9222"
 EXPORT_DIR = r"C:\SEI_Exportacoes"
 PROCESS_FILE = "processos.txt"
+DB_FILE = "automacao.db"
 DELAY_BETWEEN_PROCESSES = 4  # segundos (conforme requisito 8)
 
 # Lista padrão de processos caso o arquivo processos.txt não exista ou esteja vazio
@@ -17,13 +19,83 @@ DEFAULT_PROCESS_LIST = [
     "202600004061769"
 ]
 
+# ==============================================================================
+# HELPERS DO BANCO DE DADOS (SQLITE)
+# ==============================================================================
+def inicializar_banco(processos):
+    """Cria a tabela de controle e sincroniza com a lista de processos fornecida."""
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS processos (
+            numero_processo TEXT PRIMARY KEY,
+            status TEXT NOT NULL,          -- PENDENTE, SUCESSO, FALHA
+            tentativas INTEGER DEFAULT 0,
+            ultima_execucao TEXT,
+            mensagem_erro TEXT
+        )
+    """)
+    conn.commit()
+    
+    # Adicionar novos processos vindos do arquivo txt (deduplicando para evitar UNIQUE constraint failed)
+    cursor.execute("SELECT numero_processo FROM processos")
+    processos_no_db = {row[0] for row in cursor.fetchall()}
+    
+    processos_unicos = list(dict.fromkeys(processos))
+    novos = [(p, "PENDENTE") for p in processos_unicos if p not in processos_no_db]
+    if novos:
+        cursor.executemany("INSERT OR IGNORE INTO processos (numero_processo, status) VALUES (?, ?)", novos)
+        conn.commit()
+        print(f"[*] Sincronizados {len(novos)} novos processos no banco de dados.")
+        
+    conn.close()
+
+def obter_processos_a_executar(processos_txt):
+    """Filtra a lista do processos.txt retornando apenas os que não são SUCESSO no banco."""
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT numero_processo FROM processos WHERE status = 'SUCESSO'")
+    sucessos = {row[0] for row in cursor.fetchall()}
+    conn.close()
+    
+    # Retorna apenas os processos da lista do TXT que não são sucesso
+    fila = [p for p in processos_txt if p not in sucessos]
+    return fila
+
+def atualizar_status_processo(numero_processo, status, mensagem_erro=None, incrementar_tentativa=False):
+    """Atualiza o status, data de execução e mensagem de erro do processo."""
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    agora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    if incrementar_tentativa:
+        cursor.execute("""
+            UPDATE processos 
+            SET status = ?, ultima_execucao = ?, mensagem_erro = ?, tentativas = tentativas + 1
+            WHERE numero_processo = ?
+        """, (status, agora, mensagem_erro, numero_processo))
+    else:
+        cursor.execute("""
+            UPDATE processos 
+            SET status = ?, ultima_execucao = ?, mensagem_erro = ?
+            WHERE numero_processo = ?
+        """, (status, agora, mensagem_erro, numero_processo))
+        
+    conn.commit()
+    conn.close()
+
+# ==============================================================================
+# HELPERS DE INTERFACE TEXTUAL & ARQUIVOS
+# ==============================================================================
 def carregar_processos():
-    """Carrega os números dos processos do arquivo processos.txt ou usa a lista padrão."""
+    """Carrega e deduplica os números dos processos do arquivo processos.txt ou usa a lista padrão."""
     if not os.path.exists(PROCESS_FILE):
         print(f"[*] Criando arquivo '{PROCESS_FILE}' com processos de exemplo...")
         with open(PROCESS_FILE, "w", encoding="utf-8") as f:
             f.write("\n".join(DEFAULT_PROCESS_LIST) + "\n")
-        return DEFAULT_PROCESS_LIST
+        return list(dict.fromkeys(DEFAULT_PROCESS_LIST))
     
     processos = []
     with open(PROCESS_FILE, "r", encoding="utf-8") as f:
@@ -34,10 +106,116 @@ def carregar_processos():
                 
     if not processos:
         print(f"[!] Arquivo '{PROCESS_FILE}' está vazio. Usando a lista padrão...")
-        return DEFAULT_PROCESS_LIST
+        return list(dict.fromkeys(DEFAULT_PROCESS_LIST))
         
-    return processos
+    return list(dict.fromkeys(processos))
 
+def verificar_pdf_valido(numero_processo):
+    """Verifica se o arquivo PDF existe localmente e se tem tamanho válido (> 1 KB)."""
+    pdf_path = os.path.join(EXPORT_DIR, f"{numero_processo}.pdf")
+    if os.path.exists(pdf_path):
+        size = os.path.getsize(pdf_path)
+        if size > 1024:  # Maior que 1 KB
+            return True
+    return False
+
+def exibir_barra_progresso(index, total, sucessos, falhas, ignorados, tempo_inicio):
+    """Gera uma barra de progresso em tempo real no terminal com estatísticas e ETA."""
+    if total == 0:
+        return
+        
+    percentual = (index / total) * 100
+    largura_barra = 30
+    preenchido = int(largura_barra * index // total)
+    barra = "=" * preenchido + ">" + " " * (largura_barra - preenchido - 1)
+    if index == total:
+        barra = "=" * largura_barra
+        
+    # Calcular tempos
+    tempo_decorrido = time.time() - tempo_inicio
+    processados_efetivos = index - ignorados
+    
+    if processados_efetivos > 0:
+        tempo_medio = tempo_decorrido / processados_efetivos
+        restantes = total - index
+        eta_segundos = restantes * tempo_medio
+        
+        eta_m, eta_s = divmod(int(eta_segundos), 60)
+        eta_h, eta_m = divmod(eta_m, 60)
+        eta_str = f"{eta_h:02d}h:{eta_m:02d}m:{eta_s:02d}s" if eta_h > 0 else f"{eta_m:02d}m:{eta_s:02d}s"
+    else:
+        eta_str = "--:--"
+        
+    dec_m, dec_s = divmod(int(tempo_decorrido), 60)
+    dec_h, dec_m = divmod(dec_m, 60)
+    dec_str = f"{dec_h:02d}h:{dec_m:02d}m:{dec_s:02d}s" if dec_h > 0 else f"{dec_m:02d}m:{dec_s:02d}s"
+    
+    sys.stdout.write("\r")
+    sys.stdout.write(
+        f"[{barra}] {percentual:5.1f}% | "
+        f"Progresso: {index}/{total} | "
+        f"Sucesso: {sucessos} | "
+        f"Falha: {falhas} | "
+        f"Ignorados: {ignorados} | "
+        f"Tempo: {dec_str} | "
+        f"ETA: {eta_str}"
+    )
+    sys.stdout.flush()
+
+def gerar_relatorio_final(processos_lote, tempo_inicio, sucessos, falhas, ignorados):
+    """Gera um relatório de execução textual consolidado na pasta de exportações."""
+    agora_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    relatorio_path = os.path.join(EXPORT_DIR, f"relatorio_execucao_{agora_str}.txt")
+    
+    tempo_total = time.time() - tempo_inicio
+    tot_m, tot_s = divmod(int(tempo_total), 60)
+    tot_h, tot_m = divmod(tot_m, 60)
+    tempo_total_str = f"{tot_h:02d}h:{tot_m:02d}m:{tot_s:02d}s" if tot_h > 0 else f"{tot_m:02d}m:{tot_s:02d}s"
+    
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute("SELECT numero_processo, mensagem_erro FROM processos WHERE status = 'FALHA'")
+    lista_falhas = cursor.fetchall()
+    
+    cursor.execute("SELECT COUNT(*), SUM(CASE WHEN status='SUCESSO' THEN 1 ELSE 0 END), SUM(CASE WHEN status='FALHA' THEN 1 ELSE 0 END), SUM(CASE WHEN status='PENDENTE' THEN 1 ELSE 0 END) FROM processos")
+    total_db, sucesso_db, falha_db, pendente_db = cursor.fetchone()
+    conn.close()
+    
+    with open(relatorio_path, "w", encoding="utf-8") as f:
+        f.write("=" * 80 + "\n")
+        f.write("             RELATÓRIO DE EXECUÇÃO - EXPORTADOR DE PROCESSOS SEI\n")
+        f.write("=" * 80 + "\n\n")
+        f.write(f"Data de Execução: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}\n")
+        f.write(f"Duração Total da Corrida: {tempo_total_str}\n\n")
+        
+        f.write("ESTATÍSTICAS DO LOTE ATUAL:\n")
+        f.write(f"- Total de processos na fila enviada: {len(processos_lote)}\n")
+        f.write(f"- Sucessos obtidos nesta corrida: {sucessos}\n")
+        f.write(f"- Falhas ocorridas nesta corrida: {falhas}\n")
+        f.write(f"- Ignorados (já baixados anteriormente): {ignorados}\n\n")
+        
+        f.write("ESTATÍSTICAS GERAIS DO BANCO DE DADOS (ACUMULADO):\n")
+        f.write(f"- Total Cadastrado: {total_db or 0}\n")
+        f.write(f"- Total Sucesso: {sucesso_db or 0}\n")
+        f.write(f"- Total Falha: {falha_db or 0}\n")
+        f.write(f"- Total Restante (Pendente): {pendente_db or 0}\n\n")
+        
+        f.write("DETALHAMENTO DE PROCESSOS COM FALHA NO BANCO (AUDITORIA):\n")
+        f.write("-" * 80 + "\n")
+        if lista_falhas:
+            for proc, msg in lista_falhas:
+                f.write(f"Processo: {proc}\n")
+                f.write(f"  Erro: {msg or 'Erro não especificado.'}\n")
+                f.write("-" * 80 + "\n")
+        else:
+            f.write("Nenhum processo com falha registrado no banco de dados.\n")
+            f.write("-" * 80 + "\n")
+            
+    print(f"\n\n[*] Relatório de execução gerado com sucesso em: {relatorio_path}")
+
+# ==============================================================================
+# LÓGICA DE INTERAÇÃO WEB (PLAYWRIGHT)
+# ==============================================================================
 def obter_pagina_sei(browser):
     """Encontra uma aba existente com o SEI ou retorna uma aba padrão."""
     contexts = browser.contexts
@@ -77,7 +255,6 @@ def preencher_busca_rapida(page, numero_processo):
         "input[placeholder*='processo']"
     ]
     
-    # 1. Tentar na página principal (raiz)
     for sel in selectors:
         try:
             loc = page.locator(sel)
@@ -89,7 +266,6 @@ def preencher_busca_rapida(page, numero_processo):
         except Exception:
             pass
             
-    # 2. Tentar em todos os frames da página
     for frame in page.frames:
         for sel in selectors:
             try:
@@ -117,62 +293,45 @@ def encontrar_botao_gerar_pdf(page):
         "[title*='Gerar Arquivo PDF']"
     ]
     
-    # No SEI 5.0.4, o botão do PDF reside fisicamente no painel da direita 'ifrConteudoVisualizacao'.
-    # 1. Tentar diretamente no frame '#ifrConteudoVisualizacao'
+    # 1. Tentar no frame '#ifrConteudoVisualizacao'
     try:
         frame_conteudo = page.frame_locator("#ifrConteudoVisualizacao")
         for sel in selectors:
             try:
                 loc = frame_conteudo.locator(sel)
                 if loc.first.is_visible():
-                    print(f"[*] Botão 'Gerar PDF' localizado no frame '#ifrConteudoVisualizacao' (seletor: '{sel}')")
                     return loc.first
             except Exception:
                 pass
-    except Exception as e:
-        print(f"[!] Erro ao buscar botão no frame '#ifrConteudoVisualizacao': {e}")
+    except Exception:
+        pass
             
-    # 2. Fallbacks em caso de telas ou versões diferentes
-    # Fallback no frame '#ifrVisualizacao'
+    # 2. Fallback no frame '#ifrVisualizacao'
     try:
         frame_visualizacao = page.frame_locator("#ifrVisualizacao")
         for sel in selectors:
             try:
                 loc = frame_visualizacao.locator(sel)
                 if loc.first.is_visible():
-                    print(f"[*] [Fallback] Botão 'Gerar PDF' localizado no frame '#ifrVisualizacao' (seletor: '{sel}')")
                     return loc.first
             except Exception:
                 pass
     except Exception:
         pass
         
-    # Fallback no contexto global da página raiz
+    # 3. Fallback na raiz da página
     for sel in selectors:
         try:
             loc = page.locator(sel)
             if loc.first.is_visible():
-                print(f"[*] [Fallback] Botão 'Gerar PDF' localizado na raiz (seletor: '{sel}')")
                 return loc.first
         except Exception:
             pass
             
-    # Fallback geral iterando por todos os frames da página
-    for f in page.frames:
-        for sel in selectors:
-            try:
-                loc = f.locator(sel)
-                if loc.first.is_visible():
-                    print(f"[*] [Fallback] Botão localizado no frame genérico '{f.name}'")
-                    return loc.first
-            except Exception:
-                pass
-                
     return None
 
 def clicar_no_raiz_arvore(page, numero_processo):
     """Clica no nó principal (raiz) do processo na árvore para garantir a exibição da capa."""
-    print("[*] Botão PDF não encontrado de imediato. Forçando seleção da raiz do processo...")
     frame_arvore = None
     for f in page.frames:
         if f.name == "ifrArvore" or "ifrArvore" in f.url:
@@ -200,7 +359,6 @@ def clicar_no_raiz_arvore(page, numero_processo):
                 loc = frame_arvore.locator(c)
                 if loc.first.is_visible():
                     loc.first.click()
-                    print(f"[*] Nó raiz selecionado na árvore via: '{c}'")
                     return True
             except Exception:
                 pass
@@ -208,19 +366,15 @@ def clicar_no_raiz_arvore(page, numero_processo):
 
 def configurar_e_gerar_pdf(page, context, numero_processo):
     """Foca no iframe do visualizador de PDF, preenche as opções e executa o download."""
-    # No SEI 5.0.4, as opções de PDF carregam dentro do frame filho '#ifrVisualizacao' (aninhado em '#ifrConteudoVisualizacao')
-    # 1. Tentar obter o frame aninhado
     frame = None
     try:
         frame = page.frame_locator("#ifrConteudoVisualizacao").frame_locator("#ifrVisualizacao")
     except Exception:
         pass
         
-    # Fallback para o frame direto '#ifrVisualizacao'
     if not frame:
         frame = page.frame_locator("#ifrVisualizacao")
         
-    # 2. Localizar o botão de submissão 'btnGerar'
     submit_selectors = [
         "button[name='btnGerar']",
         "#btnGerar",
@@ -235,16 +389,14 @@ def configurar_e_gerar_pdf(page, context, numero_processo):
             loc = frame.locator(sel)
             loc.first.wait_for(state="visible", timeout=15000)
             submit_button = loc.first
-            print(f"[*] Botão 'Gerar' encontrado no iframe com o seletor: '{sel}'")
             break
         except Exception:
             pass
             
     if not submit_button:
-        raise Exception("A tela de configuração de geração do PDF não foi exibida (botão 'Gerar' não encontrado no iframe de visualização).")
+        raise Exception("Botão 'Gerar' não encontrado no iframe de visualização.")
 
-    # 3. Selecionar o radio button "Todos os documentos disponíveis"
-    # O SEI 5.0.4 geralmente usa o valor 'T' (input[value='T'])
+    # Selecionar o radio button "Todos os documentos disponíveis" (value='T')
     radio_selectors = [
         "input[value='T']",
         "input[name='rdoTipo'][value='T']",
@@ -261,7 +413,6 @@ def configurar_e_gerar_pdf(page, context, numero_processo):
                 if not loc.first.is_checked():
                     loc.first.check()
                 radio_selected = True
-                print(f"[*] Radio button 'Todos os documentos' marcado via: '{sel}'")
                 break
         except Exception:
             pass
@@ -279,117 +430,165 @@ def configurar_e_gerar_pdf(page, context, numero_processo):
                 if loc.first.is_visible():
                     loc.first.click()
                     radio_selected = True
-                    print(f"[*] Opção marcada via texto/label: '{sel}'")
                     break
             except Exception:
                 pass
-                
-    if not radio_selected:
-        print("[!] Aviso: Não foi possível garantir a seleção do radio button de forma programática. Tentando prosseguir com a opção padrão...")
 
-    # 4. Interceptar o download e clicar em Gerar
-    print("[*] Clicando em 'Gerar' e aguardando interceptação do download...")
-    
-    with page.expect_download(timeout=90000) as download_info:  # tolerância de 90s para PDFs gigantes
+    with page.expect_download(timeout=90000) as download_info:
         submit_button.click()
         
     download = download_info.value
     download_path = os.path.join(EXPORT_DIR, f"{numero_processo}.pdf")
     download.save_as(download_path)
-    print(f"[+] Download concluído! Arquivo salvo em: {download_path}")
 
+# ==============================================================================
+# FLUXO EXECUTOR PRINCIPAL
+# ==============================================================================
 def processar_exportacao():
-    processos = carregar_processos()
-    print(f"[*] Total de processos carregados para exportar: {len(processos)}")
+    processos_txt = carregar_processos()
     
-    # Garante a existência do diretório de destino
+    # Inicializa banco SQLite
+    inicializar_banco(processos_txt)
+    
+    # Filtra processos pendentes
+    fila_execucao = obter_processos_a_executar(processos_txt)
+    total_lote = len(fila_execucao)
+    
+    print(f"[*] Total de processos carregados do arquivo TXT: {len(processos_txt)}")
+    print(f"[*] Processos a executar nesta rodada (pendentes/falhas): {total_lote}")
+    
+    if total_lote == 0:
+        print("[+] Todos os processos da lista já foram exportados com sucesso! Encerrando...")
+        return
+        
     os.makedirs(EXPORT_DIR, exist_ok=True)
-    print(f"[*] Diretório de exportação configurado: {EXPORT_DIR}")
     
     print(f"[*] Conectando-se ao Google Chrome em {CHROME_CDP_URL}...")
     try:
         with sync_playwright() as p:
             browser = p.chromium.connect_over_cdp(CHROME_CDP_URL)
-            page, context = obter_pagina_sei(browser)
             
-            # Garante tempo padrão de espera para operações normais
-            page.set_default_timeout(15000)
-            
-            for index, numero_processo in enumerate(processos, 1):
-                print("-" * 60)
-                print(f"[{index}/{len(processos)}] Iniciando processamento do processo: {numero_processo}")
+            try:
+                page, context = obter_pagina_sei(browser)
+                page.set_default_timeout(15000)
                 
-                try:
-                    # Passo 1: Inserir processo e dar enter na busca rápida
-                    success_busca = preencher_busca_rapida(page, numero_processo)
-                    if not success_busca:
-                        print("[*] Pesquisa rápida não disponível nesta tela. Atualizando página principal...")
-                        page.reload()
-                        page.wait_for_load_state("load")
-                        time.sleep(2)
-                        success_busca = preencher_busca_rapida(page, numero_processo)
-                        if not success_busca:
-                            raise Exception("Não foi possível localizar o campo de busca rápida '#txtPesquisaRapida' na tela.")
+                sucessos_corrida = 0
+                falhas_corrida = 0
+                ignorados_corrida = 0
+                tempo_inicio = time.time()
+                
+                print("\n" + "=" * 80)
+                print("                     INICIANDO EXPORTAÇÃO EM LOTE")
+                print("=" * 80 + "\n")
+                
+                # Armazena a URL base para retries
+                url_base = page.url
+                
+                for index, numero_processo in enumerate(fila_execucao, 1):
+                    # Atualiza o dashboard do terminal
+                    exibir_barra_progresso(index - 1, total_lote, sucessos_corrida, falhas_corrida, ignorados_corrida, tempo_inicio)
+                    
+                    # 1. Auto-skip: Verifica se já existe um arquivo PDF válido
+                    if verificar_pdf_valido(numero_processo):
+                        atualizar_status_processo(numero_processo, "SUCESSO")
+                        ignorados_corrida += 1
+                        exibir_barra_progresso(index, total_lote, sucessos_corrida, falhas_corrida, ignorados_corrida, tempo_inicio)
+                        continue
+                        
+                    # 2. Processar processo (com política de re-tentativa imediata)
+                    tentativa = 1
+                    limite_tentativas = 2
+                    processo_sucesso = False
+                    ultimo_erro = ""
+                    
+                    while tentativa <= limite_tentativas and not processo_sucesso:
+                        try:
+                            # Preenche barra de busca rápida
+                            success_busca = preencher_busca_rapida(page, numero_processo)
+                            if not success_busca:
+                                page.reload()
+                                page.wait_for_load_state("load")
+                                time.sleep(2)
+                                success_busca = preencher_busca_rapida(page, numero_processo)
+                                if not success_busca:
+                                    raise Exception("Pesquisa rápida não localizada.")
 
-                    # Passo 2: Aguardar o carregamento da página do processo
-                    # Monitora o contêiner principal da direita (#ifrConteudoVisualizacao)
-                    try:
-                        page.wait_for_selector("#ifrConteudoVisualizacao", timeout=15000)
-                    except Exception:
-                        alert_selectors = [".infraMensagem", ".mensagem", "#mensagem", "text='não encontrado'", "text='inexistente'"]
-                        alert_text = ""
-                        for sel in alert_selectors:
+                            # Aguarda carregar contêiner principal da visualização
                             try:
-                                loc = page.locator(sel)
-                                if loc.is_visible():
-                                    alert_text = loc.inner_text().strip()
-                                    break
+                                page.wait_for_selector("#ifrConteudoVisualizacao", timeout=15000)
                             except Exception:
-                                pass
-                        if alert_text:
-                            raise Exception(f"Erro no SEI: '{alert_text}'")
-                        else:
-                            raise Exception("Timeout aguardando o carregamento do painel do processo.")
-                    
-                    # Garante um tempo de renderização para o iframe interno
-                    print("[*] Aguardando renderização do painel interno...")
-                    time.sleep(2.5)
-                    
-                    # Passo 3 & 4: Buscar o botão Gerar PDF
-                    pdf_button = encontrar_botao_gerar_pdf(page)
-                    
-                    # Se não achou de primeira, força o clique no nó raiz na árvore
-                    if not pdf_button:
-                        clicar_no_raiz_arvore(page, numero_processo)
-                        time.sleep(2)
-                        pdf_button = encontrar_botao_gerar_pdf(page)
+                                # Verifica alertas nativos do SEI
+                                alert_selectors = [".infraMensagem", ".mensagem", "#mensagem", "text='não encontrado'", "text='inexistente'"]
+                                alert_text = ""
+                                for sel in alert_selectors:
+                                    try:
+                                        loc = page.locator(sel)
+                                        if loc.is_visible():
+                                            alert_text = loc.inner_text().strip()
+                                            break
+                                    except Exception:
+                                        pass
+                                if alert_text:
+                                    raise Exception(f"Erro no SEI: '{alert_text}'")
+                                else:
+                                    raise Exception("Timeout aguardando carregamento do processo.")
+                            
+                            time.sleep(2.5)  # Renderização
+                            
+                            # Localiza o botão PDF
+                            pdf_button = encontrar_botao_gerar_pdf(page)
+                            if not pdf_button:
+                                clicar_no_raiz_arvore(page, numero_processo)
+                                time.sleep(2)
+                                pdf_button = encontrar_botao_gerar_pdf(page)
+                                
+                            if not pdf_button:
+                                raise Exception("Botão 'Gerar PDF' não encontrado.")
+                                
+                            # Clicar no botão PDF
+                            pdf_button.click()
+                            
+                            # Executa configuração e download
+                            configurar_e_gerar_pdf(page, context, numero_processo)
+                            
+                            # Sucesso!
+                            atualizar_status_processo(numero_processo, "SUCESSO", incrementar_tentativa=True)
+                            sucessos_corrida += 1
+                            processo_sucesso = True
+                            
+                        except Exception as e:
+                            ultimo_erro = str(e)
+                            # Se falhou na 1ª tentativa, realiza re-tentativa imediata
+                            if tentativa < limite_tentativas:
+                                time.sleep(2)
+                                try:
+                                    # Reseta página para a URL base antes de re-tentar
+                                    page.goto(url_base)
+                                    page.wait_for_load_state("load")
+                                    time.sleep(2)
+                                except Exception:
+                                    pass
+                            tentativa += 1
+                            
+                    if not processo_sucesso:
+                        atualizar_status_processo(numero_processo, "FALHA", mensagem_erro=ultimo_erro, incrementar_tentativa=True)
+                        falhas_corrida += 1
                         
-                    if not pdf_button:
-                        raise Exception("Botão 'Gerar PDF do Processo' (acao=procedimento_gerar_pdf) não foi localizado na interface.")
+                    # Atualiza progress bar ao finalizar
+                    exibir_barra_progresso(index, total_lote, sucessos_corrida, falhas_corrida, ignorados_corrida, tempo_inicio)
+                    
+                    # Intervalo de segurança
+                    if index < total_lote:
+                        time.sleep(DELAY_BETWEEN_PROCESSES)
                         
-                    # Passo 5: Clicar no botão (carregará as opções no iframe #ifrVisualizacao)
-                    print("[*] Clicando no ícone 'Gerar PDF' do processo...")
-                    pdf_button.click()
-                    
-                    # Passo 6 & 7: Ajustar configurações de PDF e baixar
-                    configurar_e_gerar_pdf(page, context, numero_processo)
-                    
-                except Exception as proc_err:
-                    print(f"[ERROR] Falha ao exportar processo {numero_processo}: {proc_err}")
+                # Gerar relatório final de execução
+                gerar_relatorio_final(fila_execucao, tempo_inicio, sucessos_corrida, falhas_corrida, ignorados_corrida)
                 
-                # Passo 8: Intervalo de segurança antes de prosseguir
-                if index < len(processos):
-                    print(f"[*] Aguardando intervalo de segurança de {DELAY_BETWEEN_PROCESSES} segundos...")
-                    time.sleep(DELAY_BETWEEN_PROCESSES)
-                    
-            print("=" * 60)
-            print("[+] Processamento de lote concluído!")
-            browser.close()
-            
+            finally:
+                browser.close()
+                
     except Exception as connection_err:
-        print(f"[FATAL] Erro ao conectar ou comunicar com a instância do Chrome: {connection_err}")
-        print("[TIP] Certifique-se de que o Google Chrome está aberto na porta 9222.")
-        print("[TIP] Comando para iniciar o Chrome: chrome.exe --remote-debugging-port=9222")
+        print(f"\n[FATAL] Erro ao conectar ou comunicar com a instância do Chrome: {connection_err}")
 
 if __name__ == "__main__":
     if sys.platform.startswith("win"):
@@ -397,7 +596,7 @@ if __name__ == "__main__":
         kernel32 = ctypes.windll.kernel32
         kernel32.SetConsoleMode(kernel32.GetStdHandle(-11), 7)
         
-    print("=" * 60)
-    print("      EXPORTADOR DE PROCESSOS SEI 5.0.4 - DOWNLOAD EM PDF")
-    print("=" * 60)
+    print("=" * 80)
+    print("      PIPELINE DE EXPORTAÇÃO SEI - CONEXÃO CDP PORTA 9222")
+    print("=" * 80)
     processar_exportacao()
