@@ -10,8 +10,8 @@ from playwright.sync_api import sync_playwright
 # COLOQUE A URL DO SEI DO SEU ÓRGÃO AQUI (ou crie um arquivo url_sei.txt contendo a URL)
 SEI_URL = "https://[URL_DO_SEI_DO_SEU_ORGAO]"
 
-USER_DATA_DIR = r"C:\SEI_Exportacoes\perfil_sei"
-EXPORT_DIR = r"C:\SEI_Exportacoes"
+USER_DATA_DIR = r"C:\Users\pedro.galvao\Documents\SEI_Exportacoes\perfil_sei"
+EXPORT_DIR = r"C:\Users\pedro.galvao\Documents\SEI_Exportacoes"
 PROCESS_FILE = "processos.txt"
 DB_FILE = "automacao.db"
 DELAY_BETWEEN_PROCESSES = 4  # segundos (conforme requisito 8)
