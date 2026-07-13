@@ -37,10 +37,18 @@ def inicializar_banco(processos):
             status TEXT NOT NULL,          -- PENDENTE, SUCESSO, FALHA
             tentativas INTEGER DEFAULT 0,
             ultima_execucao TEXT,
-            mensagem_erro TEXT
+            mensagem_erro TEXT,
+            prazo TEXT
         )
     """)
     conn.commit()
+    
+    # Migração automática se a tabela processos já existia sem a coluna 'prazo'
+    try:
+        cursor.execute("ALTER TABLE processos ADD COLUMN prazo TEXT")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
     
     # Adicionar novos processos vindos do arquivo txt (deduplicando para evitar UNIQUE constraint failed)
     cursor.execute("SELECT numero_processo FROM processos")
@@ -68,25 +76,27 @@ def obter_processos_a_executar(processos_txt):
     fila = [p for p in processos_txt if p not in sucessos]
     return fila
 
-def atualizar_status_processo(numero_processo, status, mensagem_erro=None, incrementar_tentativa=False):
-    """Atualiza o status, data de execução e mensagem de erro do processo."""
+def atualizar_status_processo(numero_processo, status, mensagem_erro=None, incrementar_tentativa=False, prazo=None):
+    """Atualiza o status, data de execução, mensagem de erro e prazo do processo."""
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     agora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
-    if incrementar_tentativa:
-        cursor.execute("""
-            UPDATE processos 
-            SET status = ?, ultima_execucao = ?, mensagem_erro = ?, tentativas = tentativas + 1
-            WHERE numero_processo = ?
-        """, (status, agora, mensagem_erro, numero_processo))
-    else:
-        cursor.execute("""
-            UPDATE processos 
-            SET status = ?, ultima_execucao = ?, mensagem_erro = ?
-            WHERE numero_processo = ?
-        """, (status, agora, mensagem_erro, numero_processo))
+    set_clause = "status = ?, ultima_execucao = ?, mensagem_erro = ?"
+    params = [status, agora, mensagem_erro]
+    
+    if prazo is not None:
+        set_clause += ", prazo = ?"
+        params.append(prazo)
         
+    if incrementar_tentativa:
+        set_clause += ", tentativas = tentativas + 1"
+        
+    params.append(numero_processo)
+    
+    query = f"UPDATE processos SET {set_clause} WHERE numero_processo = ?"
+    cursor.execute(query, params)
+    
     conn.commit()
     conn.close()
 
@@ -377,6 +387,46 @@ def clicar_no_raiz_arvore(page, numero_processo):
                 pass
     return False
 
+def extrair_prazo_processo(page):
+    """
+    Tenta localizar o ícone de controle de prazo na árvore do processo (iframe ifrArvore)
+    e extrai o conteúdo do atributo 'title' da imagem do prazo.
+    Retorna o texto em linha única ou None se não encontrar ou se estiver sem prazo.
+    """
+    frame_arvore = None
+    for f in page.frames:
+        if f.name == "ifrArvore" or "ifrArvore" in f.url:
+            frame_arvore = f
+            break
+            
+    if not frame_arvore:
+        try:
+            frame_arvore = page.frame_locator("#ifrArvore")
+        except Exception:
+            pass
+            
+    if not frame_arvore:
+        return None
+        
+    selectors = [
+        "img[id^='iconCP']",
+        "img[src*='controle_prazo']",
+        "a[href*='controle_prazo_definir'] img"
+    ]
+    
+    for sel in selectors:
+        try:
+            loc = frame_arvore.locator(sel)
+            if loc.first.is_visible(timeout=1000):
+                title = loc.first.get_attribute("title")
+                if title:
+                    prazo_limpo = " ".join(title.split())
+                    return prazo_limpo
+        except Exception:
+            pass
+            
+    return None
+
 def configurar_e_gerar_pdf(page, context, numero_processo):
     """Foca no iframe do visualizador de PDF, preenche as opções e executa o download."""
     frame = None
@@ -540,6 +590,7 @@ def processar_exportacao():
                     limite_tentativas = 2
                     processo_sucesso = False
                     ultimo_erro = ""
+                    prazo_detectado = None
                     
                     while tentativa <= limite_tentativas and not processo_sucesso:
                         try:
@@ -575,6 +626,14 @@ def processar_exportacao():
                             
                             time.sleep(2.5)  # Renderização
                             
+                            # Extrai o prazo se houver na árvore do processo
+                            try:
+                                prazo_detectado = extrair_prazo_processo(page)
+                                if prazo_detectado:
+                                    print(f"\n[*] Prazo identificado: {prazo_detectado}")
+                            except Exception as pe:
+                                print(f"\n[!] Erro ao tentar extrair prazo: {pe}")
+                            
                             # Localiza o botão PDF
                             pdf_button = encontrar_botao_gerar_pdf(page)
                             if not pdf_button:
@@ -592,7 +651,7 @@ def processar_exportacao():
                             configurar_e_gerar_pdf(page, context, numero_processo)
                             
                             # Sucesso!
-                            atualizar_status_processo(numero_processo, "SUCESSO", incrementar_tentativa=True)
+                            atualizar_status_processo(numero_processo, "SUCESSO", incrementar_tentativa=True, prazo=prazo_detectado)
                             sucessos_corrida += 1
                             processo_sucesso = True
                             
