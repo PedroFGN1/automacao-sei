@@ -301,9 +301,9 @@ def main():
         # Modo padrão: indexa a pasta e depois executa os testes de busca especificados no prompt
         indexar_pasta(args.dir)
         
-        print(f"{Cores.NEGRITO}=== Executando Busca Demonstrativa (Requisito Módulo Extra) ==={Cores.RESET}")
-        termos_demonstrativos = ['Ação Civil Pública', 'ACP', 'Ministério Público']
-        buscar_palavras_chave(termos_demonstrativos)
+        #print(f"{Cores.NEGRITO}=== Executando Busca Demonstrativa (Requisito Módulo Extra) ==={Cores.RESET}")
+        #termos_demonstrativos = ['Ação Civil Pública', 'ACP', 'Ministério Público']
+        #buscar_palavras_chave(termos_demonstrativos)
 
 
 if __name__ == "__main__":
