@@ -225,7 +225,7 @@ def buscar_palavras_chave(termos_busca):
     if not resultados:
         print(f"{Cores.AMARELO}[!] Nenhuma ocorrência dos termos informados foi encontrada no banco de dados.{Cores.RESET}")
         conn.close()
-        return
+        return []
 
     print(f"{Cores.VERDE}[OK] Encontrado(s) {len(resultados)} processo(s) correspondente(s):{Cores.RESET}\n")
 
@@ -268,6 +268,7 @@ def buscar_palavras_chave(termos_busca):
         print("-" * 50)
 
     conn.close()
+    return [row[0] for row in resultados]
 
 
 def main():
@@ -288,22 +289,37 @@ def main():
         type=str,
         help="Termo ou palavra-chave para buscar no banco de dados. Se fornecido, o script não indexará novos PDFs."
     )
+    
+    parser.add_argument(
+        "--n8n",
+        action="store_true",
+        help="Envia os PDFs dos processos encontrados na busca para o webhook do n8n."
+    )
 
     args = parser.parse_args()
 
     # Inicializa a estrutura do banco SQLite
     inicializar_banco()
 
+    processos_encontrados = []
+
     if args.search:
-        # Se passar o argumento de busca, realiza apenas a busca e encerra
-        buscar_palavras_chave([args.search])
+        # Se passar o argumento de busca, realiza apenas a busca
+        processos_encontrados = buscar_palavras_chave([args.search])
     else:
         # Modo padrão: indexa a pasta e depois executa os testes de busca especificados no prompt
         indexar_pasta(args.dir)
         
         #print(f"{Cores.NEGRITO}=== Executando Busca Demonstrativa (Requisito Módulo Extra) ==={Cores.RESET}")
         #termos_demonstrativos = ['Ação Civil Pública', 'ACP', 'Ministério Público']
-        #buscar_palavras_chave(termos_demonstrativos)
+        #processos_encontrados = buscar_palavras_chave(termos_demonstrativos)
+        
+    if args.n8n and processos_encontrados:
+        try:
+            from enviar_n8n import enviar_processos_n8n
+            enviar_processos_n8n(processos_encontrados, pasta_pdfs=args.dir)
+        except Exception as ne:
+            print(f"{Cores.VERMELHO}[ERRO] Falha ao executar o envio para o n8n: {ne}{Cores.RESET}")
 
 
 if __name__ == "__main__":

@@ -147,14 +147,26 @@ echo Pesquisando por:
 echo "%termo%"
 echo.
 
-"%PYTHON%" "%SCRIPT%" --search "%termo%"
+set "enviar_n8n="
+set /p "enviar_n8n=Deseja enviar os PDFs encontrados para o webhook do n8n? (S/N): "
+
+echo.
+if /i "%enviar_n8n%"=="S" (
+    echo [*] Pesquisando e enviando resultados para o n8n...
+    echo.
+    "%PYTHON%" "%SCRIPT%" --search "%termo%" --n8n
+) else (
+    echo [*] Executando apenas a pesquisa...
+    echo.
+    "%PYTHON%" "%SCRIPT%" --search "%termo%"
+)
 set "RESULTADO=%ERRORLEVEL%"
 
 echo.
 if not "%RESULTADO%"=="0" (
-    echo [ERRO] O programa terminou com codigo %RESULTADO%.
+    echo [ERRO] A operacao terminou com codigo %RESULTADO%.
 ) else (
-    echo [OK] Pesquisa concluida.
+    echo [OK] Operacao concluida com sucesso.
 )
 
 echo.
