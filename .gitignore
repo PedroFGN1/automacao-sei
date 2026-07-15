@@ -3,3 +3,14 @@ processos.txt
 __pycache__
 .env
 .agents
+*.pyc
+.venv/
+venv/
+dist/
+*.egg-info/
+.DS_Store
+Thumbs.db
+*.tmp
+*.swp
+.vscode/
+.idea/
