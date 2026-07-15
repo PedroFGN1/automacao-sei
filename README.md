@@ -64,3 +64,20 @@ Ideal se você preferir rodar a automação diretamente no seu navegador Chrome 
 - **Deduplicação Automática**: Linhas duplicadas no arquivo `processos.txt` são limpas automaticamente, mantendo a ordem correta e prevenindo erros de restrição de chave única no banco.
 - **Política de Re-tentativa**: Falhas de carregamento ou download sofrem uma tentativa de re-execução imediata antes de marcar o processo como `FALHA` e pular para o próximo.
 - **Interface e Relatório**: O terminal exibe uma barra de progresso em tempo real com estatísticas de sucesso/falha e cálculo de tempo restante (ETA). Ao término da corrida, um arquivo descritivo contendo os detalhes das falhas é gerado no diretório de exportação.
+
+---
+
+## 🏛️ Gerenciador Modular de Automações SEI (Interface Desktop)
+
+O projeto evoluiu para incluir uma interface Desktop completa com arquitetura limpa e desacoplada (Backend core vs. Frontend ui) que permite orquestrar e monitorar múltiplos scripts de automação (procedures) de forma unificada.
+
+### Estrutura de Pastas do Gerenciador Modular
+- **[core/](file:///C:/Users/pedro.galvao/Documents/automacao-sei/core)**: Contém a lógica de persistência paginada ([database.py](file:///C:/Users/pedro.galvao/Documents/automacao-sei/core/database.py)), o processador de PDFs ([pdf_processor.py](file:///C:/Users/pedro.galvao/Documents/automacao-sei/core/pdf_processor.py)), o cliente de inteligência do n8n ([n8n_client.py](file:///C:/Users/pedro.galvao/Documents/automacao-sei/core/n8n_client.py)) e o contrato de classes de automação ([base_procedure.py](file:///C:/Users/pedro.galvao/Documents/automacao-sei/core/base_procedure.py)).
+- **[procedures/](file:///C:/Users/pedro.galvao/Documents/automacao-sei/procedures)**: Pasta onde ficam alocadas as automações independentes (plugins). Novo scripts que herdam de `BaseProcedure` são detectados dinamicamente na inicialização do aplicativo.
+- **[ui/](file:///C:/Users/pedro.galvao/Documents/automacao-sei/ui)**: Código da interface gráfica em CustomTkinter contendo componentes reutilizáveis como a tabela paginada ([paginated_table.py](file:///C:/Users/pedro.galvao/Documents/automacao-sei/ui/components/paginated_table.py)) e o console de logs em tempo real ([log_viewer.py](file:///C:/Users/pedro.galvao/Documents/automacao-sei/ui/components/log_viewer.py)).
+
+### Como Executar o Gerenciador Modular Desktop
+1. Dê um duplo clique no script utilitário **[iniciar_gerenciador.bat](file:///C:/Users/pedro.galvao/Documents/automacao-sei/iniciar_gerenciador.bat)** na raiz do projeto (ou execute `.venv\Scripts\python.exe main.py` no terminal).
+2. Na aba **Processos Locais**, use o campo de busca e navegue com os botões de paginação na lista de processos do SQLite local.
+3. No painel de controle esquerdo, selecione a automação desejada (ex: `ExportadorSei`), configure os parâmetros dinâmicos e clique em **Iniciar Automação**.
+4. A tela alternará automaticamente para a aba **Console de Execução**, exibindo os logs da thread secundária de automação em tempo real sem travar a janela da aplicação.
