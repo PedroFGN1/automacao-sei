@@ -21,7 +21,7 @@ from datetime import datetime
 import pypdf
 
 # === CONFIGURAÇÕES PADRÃO ===
-DB_FILE = "automacao.db"
+DB_FILE = r"C:\Users\pedro.galvao\Documents\automacao.db"
 DEFAULT_EXPORT_DIR = r"C:\Users\pedro.galvao\Documents\SEI_Exportacoes"
 
 # Códigos ANSI para colorir logs no console

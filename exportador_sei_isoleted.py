@@ -13,7 +13,7 @@ SEI_URL = "https://[URL_DO_SEI_DO_SEU_ORGAO]"
 USER_DATA_DIR = r"C:\Users\pedro.galvao\Documents\SEI_Exportacoes\perfil_sei"
 EXPORT_DIR = r"C:\Users\pedro.galvao\Documents\SEI_Exportacoes"
 PROCESS_FILE = "processos.txt"
-DB_FILE = "automacao.db"
+DB_FILE = r"C:\Users\pedro.galvao\Documents\automacao.db"
 DELAY_BETWEEN_PROCESSES = 4  # segundos (conforme requisito 8)
 
 # Lista padrão de processos caso o arquivo processos.txt não exista ou esteja vazio

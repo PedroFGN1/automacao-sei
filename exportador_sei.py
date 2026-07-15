@@ -9,7 +9,7 @@ from playwright.sync_api import sync_playwright
 CHROME_CDP_URL = "http://localhost:9222"
 EXPORT_DIR = r"C:\SEI_Exportacoes"
 PROCESS_FILE = "processos.txt"
-DB_FILE = "automacao.db"
+DB_FILE = r"C:\Users\pedro.galvao\Documents\automacao.db"
 DELAY_BETWEEN_PROCESSES = 4  # segundos (conforme requisito 8)
 
 # Lista padrão de processos caso o arquivo processos.txt não exista ou esteja vazio
