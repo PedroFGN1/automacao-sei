@@ -2,3 +2,4 @@ info_debugs
 processos.txt
 __pycache__
 .env
+.agents
