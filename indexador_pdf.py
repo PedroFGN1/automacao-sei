@@ -193,31 +193,47 @@ def indexar_pasta(caminho_pasta):
     print(f"=============================\n")
 
 
-def buscar_palavras_chave(termos_busca):
+def buscar_palavras_chave(termos_busca, termos_ignorar=None):
     """
     Busca por palavras-chave na tabela processos_texto usando a cláusula LIKE.
+    Permite ignorar registros que contenham determinados termos.
     Retorna resultados detalhados destacando trechos do texto.
     """
     if not os.path.exists(DB_FILE):
         print(f"{Cores.VERMELHO}[ERRO] O banco de dados '{DB_FILE}' não foi encontrado. Execute a indexação primeiro.{Cores.RESET}")
-        return
+        return []
 
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
 
-    print(f"{Cores.NEGRITO}[*] Buscando registros que contêm: {', '.join([f'\"{t}\"' for t in termos_busca])}...{Cores.RESET}\n")
+    # Filtra termos vazios das listas
+    termos_busca = [t for t in termos_busca if t]
+    termos_ignorar_filtrados = [t for t in termos_ignorar if t] if termos_ignorar else []
 
-    # Monta a query dinâmica com cláusulas LIKE ligadas por OR
-    # Exemplo: texto_completo LIKE ? OR texto_completo LIKE ? ...
-    clausulas = " OR ".join(["texto_completo LIKE ?" for _ in termos_busca])
+    if not termos_busca:
+        print(f"{Cores.AMARELO}[!] Nenhum termo de busca válido foi fornecido.{Cores.RESET}")
+        conn.close()
+        return []
+
+    mensagem_busca = f"{Cores.NEGRITO}[*] Buscando registros que contêm: {', '.join([f'\"{t}\"' for t in termos_busca])}"
+    if termos_ignorar_filtrados:
+        mensagem_busca += f" e NÃO contêm: {', '.join([f'\"{t}\"' for t in termos_ignorar_filtrados])}"
+    mensagem_busca += f"...{Cores.RESET}\n"
+    print(mensagem_busca)
+
+    # Monta a query dinâmica com cláusulas LIKE ligadas por OR para termos_busca
+    clausulas_busca = " OR ".join(["texto_completo LIKE ?" for _ in termos_busca])
     query = f"""
         SELECT numero_processo, texto_completo 
         FROM processos_texto 
-        WHERE {clausulas}
+        WHERE ({clausulas_busca})
     """
-    
-    # Prepara os parâmetros com os curingas '%'
     parametros = [f"%{termo}%" for termo in termos_busca]
+    
+    if termos_ignorar_filtrados:
+        clausulas_ignorar = " OR ".join(["texto_completo LIKE ?" for _ in termos_ignorar_filtrados])
+        query += f" AND NOT ({clausulas_ignorar})"
+        parametros.extend([f"%{termo}%" for termo in termos_ignorar_filtrados])
     
     cursor.execute(query, parametros)
     resultados = cursor.fetchall()
@@ -271,6 +287,16 @@ def buscar_palavras_chave(termos_busca):
     return [row[0] for row in resultados]
 
 
+def buscar(texto_procurado, texto_nao_procurado=None):
+    """
+    Função de busca que recebe o texto procurado e o texto a ser ignorado.
+    Retorna uma lista com os números dos processos correspondentes.
+    """
+    termos_busca = [texto_procurado] if texto_procurado else []
+    termos_ignorar = [texto_nao_procurado] if texto_nao_procurado else None
+    return buscar_palavras_chave(termos_busca, termos_ignorar)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Indexador e Buscador de Textos de PDFs do SEI",
@@ -289,6 +315,12 @@ def main():
         type=str,
         help="Termo ou palavra-chave para buscar no banco de dados. Se fornecido, o script não indexará novos PDFs."
     )
+
+    parser.add_argument(
+        "-i", "--ignore",
+        type=str,
+        help="Termo ou palavra-chave para ignorar nos registros da busca."
+    )
     
     parser.add_argument(
         "--n8n",
@@ -305,7 +337,7 @@ def main():
 
     if args.search:
         # Se passar o argumento de busca, realiza apenas a busca
-        processos_encontrados = buscar_palavras_chave([args.search])
+        processos_encontrados = buscar(args.search, args.ignore)
     else:
         # Modo padrão: indexa a pasta e depois executa os testes de busca especificados no prompt
         indexar_pasta(args.dir)
@@ -326,5 +358,9 @@ if __name__ == "__main__":
     # Garante suporte a cores ANSI no console do Windows (se aplicável)
     if sys.platform.startswith('win'):
         os.system('color')
+        try:
+            sys.stdout.reconfigure(encoding='utf-8')
+        except AttributeError:
+            pass
         
     main()
