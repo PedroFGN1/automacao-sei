@@ -3,7 +3,7 @@ import sys
 import importlib
 import traceback
 from typing import Dict, List, Type
-from src.core.plugin_base import BasePlugin
+from app.core.plugin_base import BasePlugin
 
 class PluginManager:
     """
@@ -12,7 +12,7 @@ class PluginManager:
     """
     def __init__(self, plugins_dir: str = None):
         if plugins_dir is None:
-            # Caminho padrão: src/plugins/
+            # Caminho padrão: app/plugins/
             base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             self.plugins_dir = os.path.join(base_dir, "plugins")
         else:
@@ -34,7 +34,7 @@ class PluginManager:
             return self.plugins
 
         # Adiciona a pasta de plugins ao sys.path para importação dinâmica correta
-        # de forma que possamos importar como 'src.plugins.modulo' ou 'plugins.modulo'
+        # de forma que possamos importar como 'app.plugins.modulo' ou 'plugins.modulo'
         parent_dir = os.path.dirname(self.plugins_dir)
         if parent_dir not in sys.path:
             sys.path.insert(0, parent_dir)
@@ -46,9 +46,9 @@ class PluginManager:
                 module_name = filename[:-3]
                 try:
                     # Tenta importar o módulo dinamicamente
-                    # Prefere importá-lo relativo a 'plugins' ou 'src.plugins'
+                    # Prefere importá-lo relativo a 'plugins' ou 'app.plugins'
                     try:
-                        module = importlib.import_module(f"src.plugins.{module_name}")
+                        module = importlib.import_module(f"app.plugins.{module_name}")
                     except ImportError:
                         module = importlib.import_module(module_name)
                     

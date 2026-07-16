@@ -7,13 +7,13 @@ from datetime import datetime
 # Garante que o diretório raiz esteja no sys.path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.core.plugin_manager import PluginManager
-from src.core.executor import PluginExecutor
+from app.core.plugin_manager import PluginManager
+from app.core.executor import PluginExecutor
 
 class SEIAutomationApp:
     def __init__(self, root: tk.Tk):
         self.root = root
-        self.root.title("SEI Automation Hub")
+        self.root.title("Auto SEI")
         self.root.geometry("800x650")
         self.root.minsize(700, 500)
         

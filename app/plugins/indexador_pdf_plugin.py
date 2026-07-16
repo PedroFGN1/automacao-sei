@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Dict, Any, List
 # pyrefly: ignore [missing-import]
 import pypdf
-from src.core.plugin_base import BasePlugin
+from app.core.plugin_base import BasePlugin
 
 class IndexadorPdfPlugin(BasePlugin):
     """

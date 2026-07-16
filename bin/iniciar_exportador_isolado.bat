@@ -11,6 +11,6 @@ echo 1. Na janela do navegador que se abrir, digite a URL do SEI (se solicitado 
 echo 2. O script detectara o login e iniciara a exportacao em lote automaticamente.
 echo 3. Os PDFs serao salvos na pasta C:\SEI_Exportacoes.
 echo.
-.venv\Scripts\python.exe exportador_sei_isoleted.py
+"%~dp0..\.venv\Scripts\python.exe" "%~dp0..\scripts\exportador_sei_isoleted.py"
 echo.
 pause
