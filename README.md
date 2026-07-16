@@ -8,8 +8,11 @@ A automação é projetada para rodar de forma confiável em lotes massivos (mai
 
 ## 🏗️ Estrutura do Repositório
 
-- **[exportador_sei_isoleted.py](file:///C:/Users/pedro.galvao/Documents/automacao-sei/exportador_sei_isoleted.py)**: Script que gerencia e abre seu próprio navegador Chrome de forma isolada e persistente, armazenando a sessão de login localmente.
-- **[exportador_sei.py](file:///C:/Users/pedro.galvao/Documents/automacao-sei/exportador_sei.py)**: Script alternativo que se conecta a uma instância do Chrome já aberta no seu computador (porta de depuração `9222`).
+- **[src/](file:///C:/Users/pedro.galvao/Documents/automacao-sei/src/)**: Código-fonte do **SEI Automation Hub**, a nova aplicação desktop modular baseada em plugins desenvolvida em Tkinter.
+  - **[src/app.py](file:///C:/Users/pedro.galvao/Documents/automacao-sei/src/app.py)**: Ponto de entrada da interface gráfica.
+  - **[src/plugins/](file:///C:/Users/pedro.galvao/Documents/automacao-sei/src/plugins/)**: Diretório que contém os plugins de automação carregados dinamicamente (inclui os robôs adaptados do exportador, indexador de PDFs e enviador n8n).
+- **[exportador_sei_isoleted.py](file:///C:/Users/pedro.galvao/Documents/automacao-sei/exportador_sei_isoleted.py)**: Script legado que gerencia e abre seu próprio navegador Chrome de forma isolada e persistente, armazenando a sessão de login localmente.
+- **[exportador_sei.py](file:///C:/Users/pedro.galvao/Documents/automacao-sei/exportador_sei.py)**: Script legado alternativo que se conecta a uma instância do Chrome já aberta no seu computador (porta de depuração `9222`).
 - **[processos.txt](file:///C:/Users/pedro.galvao/Documents/automacao-sei/processos.txt)**: Lista de entrada onde você insere os números dos processos a serem baixados (um por linha).
 - **[automacao.db](file:///C:/Users/pedro.galvao/Documents/automacao-sei/automacao.db)**: Banco de dados SQLite criado automaticamente para armazenar e rastrear o estado da fila de exportação.
 - **[docs/Constitution.md](file:///C:/Users/pedro.galvao/Documents/automacao-sei/docs/Constitution.md)**: Documento de constituição de arquitetura contendo especificações técnicas do DOM do SEI 5.0.4 para referência de IA/desenvolvedores.
@@ -36,7 +39,21 @@ Você pode definir a URL do SEI do seu órgão de duas formas:
 
 ## 🚀 Como Usar
 
-### Opção A: Usando o Navegador Isolado (Recomendado)
+### Opção Principal: SEI Automation Hub (Interface Desktop)
+Esta é a forma recomendada e moderna para rodar as automações, fornecendo uma interface gráfica para gerenciar todas as tarefas (exportar processos do SEI, indexar PDFs locais e enviar para o n8n).
+
+1. Execute o arquivo de interface utilizando o interpretador do ambiente virtual local:
+   ```bash
+   .venv\Scripts\python.exe src/app.py
+   ```
+2. Na janela que se abrir, selecione o robô de interesse, preencha os parâmetros dinâmicos e clique em **Iniciar Automação**.
+3. Acompanhe os logs de andamento e relatórios de progresso em tempo real diretamente na interface do aplicativo.
+
+---
+
+### Opções Legadas (Execução Individual de Scripts)
+
+#### Opção A: Usando o Navegador Isolado
 Esta opção abre uma instância do Chrome totalmente limpa, mas mantém sua sessão salva em uma pasta local (`C:\SEI_Exportacoes\perfil_sei`), evitando que você precise fazer login a cada execução.
 
 1. Insira os processos desejados no arquivo **[processos.txt](file:///C:/Users/pedro.galvao/Documents/automacao-sei/processos.txt)**.
@@ -44,7 +61,7 @@ Esta opção abre uma instância do Chrome totalmente limpa, mas mantém sua ses
 3. Na janela do Chrome que se abrir, faça o login normalmente.
 4. O script detectará o login e iniciará a exportação em lote automaticamente.
 
-### Opção B: Usando a Porta de Depuração 9222
+#### Opção B: Usando a Porta de Depuração 9222
 Ideal se você preferir rodar a automação diretamente no seu navegador Chrome principal de trabalho.
 
 1. **Feche completamente** todas as janelas abertas do Google Chrome.

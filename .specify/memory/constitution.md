@@ -1,50 +1,56 @@
-# [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+<!--
+Sync Impact Report:
+- Version change: None -> 1.0.0 (Ratificação inicial da constituição)
+- List of modified principles:
+  * [PRINCIPLE_1_NAME] -> I. Arquitetura Modular de Plugins
+  * [PRINCIPLE_2_NAME] -> II. Preservação de Legado e Retrocompatibilidade
+  * [PRINCIPLE_3_NAME] -> III. Concorrência e Isolamento em Threads
+  * [PRINCIPLE_4_NAME] -> IV. Resiliência e Tolerância a Falhas de Carregamento
+  * [PRINCIPLE_5_NAME] -> V. Desempenho e Gerenciamento de Recursos Web
+- Added sections:
+  * Tecnologia e Dependências Regulamentadas
+  * Workflow de Validação e Testes
+- Removed sections: Nenhuma
+- Templates requiring updates:
+  * README.md (✅ atualizado)
+  * docs/quickstart.md (⚠ pendente - quickstart.md da feature atualizado em specs/)
+- Follow-up TODOs: Nenhum
+-->
+
+# SEI Automation Hub Constitution
 
 ## Core Principles
 
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+### I. Arquitetura Modular de Plugins
+Toda automação de robô deve ser implementada como um plugin autônomo, herdando da interface BasePlugin e localizada no diretório src/plugins/. É estritamente proibido acoplamento direto ou importação de dependências mútuas entre plugins. Toda comunicação deve ocorrer exclusivamente via interfaces e contratos estabelecidos.
 
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+### II. Preservação de Legado e Retrocompatibilidade
+Os scripts legados originais na raiz do projeto (enviar_n8n.py, exportador_sei.py, indexador_pdf.py e arquivos .bat correspondentes) devem permanecer totalmente intocados e operacionais para execuções individuais via console/terminal. Toda a nova interface e execução de plugin gráfica deve operar de maneira isolada na pasta src/.
 
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+### III. Concorrência e Isolamento em Threads
+Para evitar o travamento da interface visual (congelamento do loop principal do Tkinter), toda execução de robô de automação (Playwright ou PyPDF) deve rodar de maneira assíncrona em uma thread dedicada (PluginExecutor). É mandatório o uso de filas de mensagens thread-safe (queue.Queue) para a passagem de logs em tempo real para a UI.
 
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+### IV. Resiliência e Tolerância a Falhas de Carregamento
+Erros de importação, sintaxe ou de execução interna em um plugin não podem indisponibilizar a inicialização do sistema principal. O gerenciador de plugins (PluginManager) deve isolar falhas de importação de arquivos malformados de forma graciosa, registrando avisos nos logs sem interromper a execução dos plugins válidos.
 
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+### V. Desempenho e Gerenciamento de Recursos Web
+Toda automação baseada em Playwright conectada via protocolo CDP (Chrome DevTools Protocol) deve gerenciar e encerrar adequadamente as conexões de rede e abas do navegador utilizadas ao final de sua execução ou caso ocorra um fechamento inesperado do aplicativo desktop, prevenindo processos órfãos do Chrome na memória.
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
+## Tecnologia e Dependências Regulamentadas
 
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
+O ecossistema do aplicativo desktop de automação fica regulamentado sob o uso de:
+- **Interface Gráfica**: Biblioteca nativa Tkinter com estilos ttk.
+- **Automação Web**: Playwright com conexões CDP na porta 9222.
+- **Extração de Texto**: pypdf para arquivos PDF.
+- **Persistência local**: Banco de dados SQLite local (automacao.db) e planilhas estruturadas (Excel/CSV).
 
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
+## Workflow de Validação e Testes
 
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
+Todo novo plugin de automação desenvolvido deve passar pela validação do contrato de interface BasePlugin e garantia de inicialização através do conjunto de testes automatizados unitários em tests/test_plugin_manager.py. A execução bem-sucedida do unittest local em ambiente virtual (.venv) é pré-requisito obrigatório antes do commit e merge de código.
 
 ## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
 
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
+- A alteração de qualquer princípio core ou restrição técnica nesta constituição requer atualização documental detalhada e o incremento da versão semântica do documento.
+- Todo pull request deve passar pelo crivo de conformidade com as regras desta constituição.
 
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+**Version**: 1.0.0 | **Ratified**: 2026-07-15 | **Last Amended**: 2026-07-16
