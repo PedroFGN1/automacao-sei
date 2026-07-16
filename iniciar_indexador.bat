@@ -133,32 +133,49 @@ echo ======================================================================
 echo.
 
 set "termo="
-set /p "termo=Digite o termo da pesquisa: "
+set /p "termo=Digite o termo que procura: "
 
 if not defined termo (
     echo.
-    echo [ERRO] O termo nao pode ficar vazio.
+    echo [ERRO] O termo de busca nao pode ficar vazio.
     pause
     goto MENU
 )
 
+set "termo_ignorar="
+set /p "termo_ignorar=Digite o termo que NAO pode ter nos registros (deixe em branco se nenhum): "
+
 echo.
-echo Pesquisando por:
-echo "%termo%"
+echo Pesquisando por: "%termo%"
+if defined termo_ignorar (
+    echo Ignorando registros com: "%termo_ignorar%"
+)
 echo.
 
 set "enviar_n8n="
 set /p "enviar_n8n=Deseja enviar os PDFs encontrados para o webhook do n8n? (S/N): "
 
 echo.
-if /i "%enviar_n8n%"=="S" (
-    echo [*] Pesquisando e enviando resultados para o n8n...
-    echo.
-    "%PYTHON%" "%SCRIPT%" --search "%termo%" --n8n
+if defined termo_ignorar (
+    if /i "%enviar_n8n%"=="S" (
+        echo [*] Pesquisando e enviando resultados para o n8n...
+        echo.
+        "%PYTHON%" "%SCRIPT%" --search "%termo%" --ignore "%termo_ignorar%" --n8n
+    ) else (
+        echo [*] Executando apenas a pesquisa...
+        echo.
+        "%PYTHON%" "%SCRIPT%" --search "%termo%" --ignore "%termo_ignorar%"
+    )
 ) else (
-    echo [*] Executando apenas a pesquisa...
-    echo.
-    "%PYTHON%" "%SCRIPT%" --search "%termo%"
+    if /i "%enviar_n8n%"=="S" (
+        echo [*] Pesquisando e enviando resultados para o n8n...
+        echo.
+        "%PYTHON%" "%SCRIPT%" --search "%termo%" --n8n
+    ) else (
+        echo [*] Executando apenas a pesquisa...
+        echo.
+        "%PYTHON%" "%SCRIPT%" --search "%termo%"
+    )
 )
 set "RESULTADO=%ERRORLEVEL%"
 

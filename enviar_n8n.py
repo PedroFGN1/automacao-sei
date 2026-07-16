@@ -21,6 +21,8 @@ load_dotenv()
 # === CONFIGURAÇÕES GERAIS ===
 DEFAULT_WEBHOOK_URL = os.getenv("N8N_WEBHOOK_URL")
 DEFAULT_EXPORT_DIR = os.getenv("EXPORT_DIR", r"C:\Users\pedro.galvao\Documents\SEI_Exportacoes")
+DEFAULT_PROMPT = os.getenv("N8N_PROMPT", "Analise os seguintes documentos e retorne uma análise completa.")
+
 
 # Cores do terminal
 class Cores:

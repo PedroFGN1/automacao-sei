@@ -1,5 +1,16 @@
 info_debugs
 processos.txt
-__pycache__
+__pycache__/
+*.pyc
+.venv/
+venv/
+dist/
+*.egg-info/
 .env
 .agents
+.vscode/
+.idea/
+*.tmp
+*.swp
+.DS_Store
+Thumbs.db
