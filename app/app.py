@@ -13,7 +13,7 @@ from app.core.executor import PluginExecutor
 class SEIAutomationApp:
     def __init__(self, root: tk.Tk):
         self.root = root
-        self.root.title("SEI Automation Hub")
+        self.root.title("Auto SEI")
         self.root.geometry("800x650")
         self.root.minsize(700, 500)
         
