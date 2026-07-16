@@ -5,7 +5,7 @@ import sqlite3
 from datetime import datetime
 from typing import Dict, Any, List
 from playwright.sync_api import sync_playwright
-from src.core.plugin_base import BasePlugin
+from app.core.plugin_base import BasePlugin
 
 class ExportadorSeiPlugin(BasePlugin):
     """

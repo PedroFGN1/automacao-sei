@@ -5,14 +5,14 @@ import unittest
 # Adiciona o diretório raiz ao sys.path para execução correta dos testes
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.core.plugin_base import BasePlugin
-from src.core.plugin_manager import PluginManager
+from app.core.plugin_base import BasePlugin
+from app.core.plugin_manager import PluginManager
 
 class TestPluginManager(unittest.TestCase):
     def setUp(self):
         # Localiza o diretório de plugins relativo a este arquivo de teste
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        self.plugins_dir = os.path.join(base_dir, "src", "plugins")
+        self.plugins_dir = os.path.join(base_dir, "plugins")
         self.manager = PluginManager(self.plugins_dir)
 
     def test_load_plugins(self):

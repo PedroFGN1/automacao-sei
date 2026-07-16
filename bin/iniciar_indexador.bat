@@ -3,8 +3,8 @@ setlocal DisableDelayedExpansion
 
 cd /d "%~dp0"
 
-set "PYTHON=%~dp0.venv\Scripts\python.exe"
-set "SCRIPT=%~dp0indexador_pdf.py"
+set "PYTHON=%~dp0..\.venv\Scripts\python.exe"
+set "SCRIPT=%~dp0..\scripts\indexador_pdf.py"
 
 if not exist "%PYTHON%" (
     echo.

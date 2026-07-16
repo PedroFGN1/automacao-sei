@@ -1,6 +1,6 @@
 import time
 from typing import Dict, Any, List
-from src.core.plugin_base import BasePlugin
+from app.core.plugin_base import BasePlugin
 
 class DummyPlugin(BasePlugin):
     """

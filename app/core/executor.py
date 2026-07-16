@@ -2,7 +2,7 @@ import threading
 import queue
 import time
 from typing import Dict, Any, Callable
-from src.core.plugin_base import BasePlugin
+from app.core.plugin_base import BasePlugin
 
 class PluginExecutor:
     """
